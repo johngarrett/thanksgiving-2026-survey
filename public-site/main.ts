@@ -28,6 +28,19 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, content?: string
 function resizeNotes(input: HTMLTextAreaElement) {
   input.style.height = 'auto'; input.style.height = `${input.scrollHeight + 2}px`;
 }
+function rainTurkeyLegs() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const rain = element('div'); rain.className = 'turkey-rain'; rain.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 300; i++) {
+    const leg = element('span', '🍗');
+    leg.style.left = `${Math.random() * 100}%`;
+    leg.style.fontSize = `${24 + Math.random() * 32}px`;
+    leg.style.animationDelay = `${Math.random() * 2}s`;
+    leg.style.animationDuration = `${2 + Math.random() * 2}s`;
+    rain.append(leg);
+  }
+  document.body.append(rain);
+}
 function notesInput(value: string, onInput: (value: string) => void) {
   const label = element('label');
   const input = element('textarea'); input.rows = 1; input.maxLength = 2048; input.value = value;
@@ -155,6 +168,7 @@ saveForm.addEventListener('submit', async event => {
     const confirmation = element('p', 'Your selections are saved.');
     confirmation.setAttribute('role', 'status'); confirmation.tabIndex = -1;
     document.querySelector('main')!.replaceChildren(confirmation); confirmation.focus();
+    rainTurkeyLegs();
   } catch {
     saveStatus.textContent = 'Connection lost. Your save may have completed. Close this dialog and reload the page before trying again, especially for custom choices.';
   } finally {

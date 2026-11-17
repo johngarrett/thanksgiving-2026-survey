@@ -35,6 +35,8 @@ test('public modal, multiple choices, custom food, plain notes, and returning gu
   await page.locator('#save').click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await expect(page.locator('main')).toHaveText('Your selections are saved.');
+  await expect(page.locator('.turkey-rain span')).toHaveCount(300);
+  await expect(page.locator('.turkey-rain span').first()).toHaveCSS('animation-iteration-count', 'infinite');
   await expect(page.getByRole('checkbox')).toHaveCount(0);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect(page.locator('main')).toHaveText('Your selections are saved.');

@@ -26,3 +26,11 @@ dialog[open]::backdrop { animation: backdrop-in 180ms ease-out; }
 @media (max-width: 600px) { dialog { padding: 3rem 1.5rem 1.5rem; } }
 
 .intro-image { display: block; width: 24rem; max-width: 100%; height: auto; margin: 0 0 2rem; }
+.turkey-rain { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 100; }
+.turkey-rain span { position: absolute; top: -8rem; line-height: 1; animation: turkey-fall linear infinite both; }
+@keyframes turkey-fall {
+  0%, 50% { scale: .35; }
+  25%, 75% { scale: 1.8; }
+  100% { scale: .35; transform: translate(-3rem, calc(100dvh + 16rem)) rotate(540deg); }
+}
+@media (prefers-reduced-motion: reduce) { .turkey-rain { display: none; } }

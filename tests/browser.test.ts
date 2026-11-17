@@ -11,7 +11,7 @@ async function adminLogin(page: Page, url = adminUrl) {
   await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
 }
 
-test('public modal, multiple choices, custom food, recipe links, and returning guests', async ({ page }) => {
+test('public modal, multiple choices, custom food, plain notes, and returning guests', async ({ page }) => {
   await page.goto(publicUrl);
   await expect(page.getByRole('button', { name: 'Submit' })).toBeEnabled();
   await page.screenshot({ path: 'test-results/public-desktop.png' });
@@ -20,17 +20,18 @@ test('public modal, multiple choices, custom food, recipe links, and returning g
   await food.getByLabel('Notes').first().fill('https://example.com/mac');
   await expect(food.locator('.custom-choice').getByLabel('Notes')).not.toBeVisible();
   await food.getByRole('checkbox', { name: 'Other', exact: true }).check();
+  await expect(food.getByLabel('Other description')).toHaveAttribute('placeholder', 'What will u cook?');
   await food.getByLabel('Other description').fill('Pumpkin pie');
   await food.getByLabel('Notes').last().fill('https://example.com/pie');
   await page.getByRole('checkbox', { name: 'Set the table', exact: true }).check();
   await page.getByRole('button', { name: 'Submit' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByLabel('Your name')).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Your name', exact: true })).toBeFocused();
   await page.screenshot({ path: 'test-results/name-modal.png' });
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await page.getByRole('button', { name: 'Submit' }).click();
-  await page.getByLabel('Your name').fill('Alex');
+  await page.getByRole('textbox', { name: 'Your name', exact: true }).fill('Alex');
   await page.locator('#save').click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await expect(page.locator('main')).toHaveText('Your selections are saved.');
@@ -44,7 +45,7 @@ test('public modal, multiple choices, custom food, recipe links, and returning g
   await expect(food.locator('.notes').last()).toHaveText('↳ https://example.com/pie');
   await expect(food.locator('.notes a')).toHaveCount(0);
   await expect(food.getByRole('checkbox', { name: 'Pumpkin pie' })).toBeDisabled();
-  // Unchecked URL inputs must not interfere with submitting another selection.
+  // Unchecked note fields must not interfere with submitting another selection.
   await food.getByRole('checkbox', { name: 'Salad', exact: true }).check();
   await food.getByLabel('Notes').nth(3).fill('bad-url');
   await food.getByRole('checkbox', { name: 'Salad', exact: true }).uncheck();
@@ -59,12 +60,12 @@ test('conflict preserves name and remaining selections; refresh errors are visib
   await page.getByRole('checkbox', { name: 'Stuffing', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Salad', exact: true }).check();
   await page.getByRole('button', { name: 'Submit' }).click();
-  await page.getByLabel('Your name').fill('Jordan');
+  await page.getByRole('textbox', { name: 'Your name', exact: true }).fill('Jordan');
   const other = await browser.newPage();
   await other.goto(publicUrl);
   await other.getByRole('checkbox', { name: 'Stuffing', exact: true }).check();
   await other.getByRole('button', { name: 'Submit' }).click();
-  await other.getByLabel('Your name').fill('Sam');
+  await other.getByRole('textbox', { name: 'Your name', exact: true }).fill('Sam');
   await other.locator('#save').click();
   await expect(other.getByRole('dialog')).not.toBeVisible();
   await page.locator('#save').click();
@@ -73,7 +74,7 @@ test('conflict preserves name and remaining selections; refresh errors are visib
   await expect(page.getByRole('checkbox', { name: 'Salad', exact: true })).toBeChecked();
   await expect(page.getByRole('status').first()).toContainText('no longer available');
   await page.getByRole('button', { name: 'Submit' }).click();
-  await expect(page.getByLabel('Your name')).toHaveValue('Jordan');
+  await expect(page.getByRole('textbox', { name: 'Your name', exact: true })).toHaveValue('Jordan');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.route('**/api/form', route => route.abort());
   await page.reload();
@@ -99,7 +100,7 @@ test('admin edits, clears, reorders by pointer and keyboard, and deletes', async
   await guest.goto(publicUrl);
   await guest.getByRole('checkbox', { name: 'Apple pie', exact: true }).check();
   await guest.getByRole('button', { name: 'Submit' }).click();
-  await guest.getByLabel('Your name').fill('Pat');
+  await guest.getByRole('textbox', { name: 'Your name', exact: true }).fill('Pat');
   await guest.locator('#save').click();
   await expect(guest.getByRole('dialog')).not.toBeVisible();
   await guest.close();
@@ -155,7 +156,12 @@ test('mobile form fits the viewport and shows custom task inputs', async ({ page
   expect(alerts).toHaveLength(0);
   await tasks.getByRole('checkbox', { name: 'Other', exact: true }).check();
   await expect(tasks.getByLabel('Notes').last()).toHaveAttribute('placeholder', 'Notes');
+  await expect(tasks.getByLabel('Other description')).toHaveAttribute('placeholder', 'What will you do?');
   await tasks.getByLabel('Other description').fill('Walk the dog');
+  const notes = tasks.getByLabel('Notes').last();
+  const shortHeight = (await notes.boundingBox())!.height;
+  await notes.fill('First line\nSecond line\nThird line');
+  expect((await notes.boundingBox())!.height).toBeGreaterThan(shortHeight);
   await expect(tasks.getByLabel('Notes').last()).toBeVisible();
   await tasks.getByRole('checkbox', { name: 'Other', exact: true }).uncheck();
   expect(alerts).toHaveLength(1);
@@ -170,7 +176,8 @@ test('admin login and edits work through the localhost development proxy', async
   await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
   await page.locator('.page-title button').first().click();
   await page.locator('.page-title').getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('status')).toBeEmpty();
+  await expect(page.locator('#status')).toBeEmpty();
+  await expect(page.locator('.page-title .pencil')).toBeFocused();
 });
 
 

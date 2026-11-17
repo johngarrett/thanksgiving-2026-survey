@@ -1,4 +1,5 @@
 import type { SignupForm, ClaimInput } from '../shared/types';
+import '../shared/ui.css';
 import './styles.css';
 
 const signup = document.querySelector<HTMLFormElement>('#signup')!;
@@ -24,11 +25,14 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, content?: string
   if (content !== undefined) node.textContent = content;
   return node;
 }
+function resizeNotes(input: HTMLTextAreaElement) {
+  input.style.height = 'auto'; input.style.height = `${input.scrollHeight + 2}px`;
+}
 function notesInput(value: string, onInput: (value: string) => void) {
   const label = element('label');
-  const input = element('input'); input.type = 'text'; input.maxLength = 2048; input.value = value;
+  const input = element('textarea'); input.rows = 1; input.maxLength = 2048; input.value = value;
   input.placeholder = 'Notes'; input.setAttribute('aria-label', 'Notes');
-  input.addEventListener('input', () => onInput(input.value));
+  input.addEventListener('input', () => { resizeNotes(input); onInput(input.value); });
   label.append(input); return label;
 }
 function render(form: SignupForm) {
@@ -57,11 +61,12 @@ function render(form: SignupForm) {
       if (option.claimedBy === null) {
         const details = element('div'); details.className = 'details'; details.hidden = !check.checked;
         details.append(notesInput(chosen.get(option.id) || '', value => chosen.set(option.id, value)));
-        details.querySelector('input')!.disabled = !check.checked;
+        details.querySelector('textarea')!.disabled = !check.checked;
         check.addEventListener('change', () => {
           details.hidden = !check.checked;
-          details.querySelector('input')!.disabled = !check.checked;
-          if (check.checked) chosen.set(option.id, details.querySelector('input')!.value); else chosen.delete(option.id);
+          details.querySelector('textarea')!.disabled = !check.checked;
+          if (check.checked) resizeNotes(details.querySelector('textarea')!);
+          if (check.checked) chosen.set(option.id, details.querySelector('textarea')!.value); else chosen.delete(option.id);
         });
         row.append(details);
       }
@@ -72,15 +77,18 @@ function render(form: SignupForm) {
     const check = element('input'); check.type = 'checkbox'; check.checked = custom.has(section.id);
     description.append(check, document.createTextNode(' Other'));
     const input = element('input'); input.type = 'text'; input.maxLength = 200; input.value = custom.get(section.id)?.label || '';
-    input.setAttribute('aria-label', 'Other description'); input.hidden = !check.checked;
+    input.setAttribute('aria-label', 'Other description');
+    input.placeholder = /\bdo\b/i.test(section.title) ? 'What will you do?' : 'What will u cook?';
+    input.hidden = !check.checked;
     const details = element('div'); details.className = 'details'; details.hidden = !check.checked;
     details.append(notesInput(custom.get(section.id)?.notes || '', value => {
       const entry = custom.get(section.id); if (entry) entry.notes = value;
     }));
-    const note = details.querySelector('input')!; note.disabled = details.hidden;
+    const note = details.querySelector('textarea')!; note.disabled = details.hidden;
     const update = () => {
       input.required = check.checked; input.hidden = !check.checked;
       details.hidden = !check.checked; note.disabled = !check.checked;
+      if (check.checked) resizeNotes(note);
       if (check.checked) custom.set(section.id, { label: input.value, notes: note.value });
       else custom.delete(section.id);
     };
@@ -99,6 +107,7 @@ function render(form: SignupForm) {
     row.append(description, input, details); fieldset.append(row); sections.append(fieldset);
   }
   submit.disabled = saving;
+  for (const note of sections.querySelectorAll('textarea')) if (!note.closest('[hidden]')) resizeNotes(note);
 }
 async function refresh() {
   if (saving || completed) return;
@@ -111,6 +120,11 @@ async function refresh() {
     data = result; render(result); status.classList.remove('selection-error'); status.textContent = '';
   } catch { if (request === refreshRequest) status.textContent = 'Could not refresh availability. Check your connection and try again.'; }
 }
+signup.addEventListener('invalid', event => {
+  const input = event.target as HTMLInputElement | HTMLTextAreaElement;
+  status.textContent = input.getAttribute('aria-label') === 'Other description' ? 'Describe your Other selection before submitting.' : input.validationMessage;
+}, true);
+saveForm.addEventListener('invalid', () => { saveStatus.textContent = 'Enter your name before submitting.'; }, true);
 signup.addEventListener('submit', event => {
   event.preventDefault();
   status.classList.remove('selection-error');
@@ -129,7 +143,7 @@ saveForm.addEventListener('submit', async event => {
     custom: [...custom].map(([sectionId, entry]) => ({ sectionId, ...entry })),
   };
   saving = true; refreshRequest++; saveButton.disabled = true; cancel.disabled = true; submit.disabled = true;
-  name.readOnly = true; saveStatus.textContent = 'Saving…';
+  name.readOnly = true; saveStatus.textContent = ''; saveButton.textContent = 'Submitting…';
   try {
     const response = await fetch(`${api}/api/claims`, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const result = await response.json();
@@ -140,12 +154,12 @@ saveForm.addEventListener('submit', async event => {
     if (!response.ok) { saveStatus.textContent = result.error || 'Unable to save. Try again.'; return; }
     completed = true; chosen.clear(); custom.clear(); dialog.close();
     const confirmation = element('p', 'Your selections are saved.');
-    confirmation.setAttribute('role', 'status');
-    document.querySelector('main')!.replaceChildren(confirmation);
+    confirmation.setAttribute('role', 'status'); confirmation.tabIndex = -1;
+    document.querySelector('main')!.replaceChildren(confirmation); confirmation.focus();
   } catch {
     saveStatus.textContent = 'Connection lost. Your save may have completed. Close this dialog and reload the page before trying again, especially for custom choices.';
   } finally {
-    saving = false; saveButton.disabled = false; cancel.disabled = false; name.readOnly = false; submit.disabled = !data;
+    saving = false; saveButton.textContent = 'Submit'; saveButton.disabled = false; cancel.disabled = false; name.readOnly = false; submit.disabled = !data;
   }
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });

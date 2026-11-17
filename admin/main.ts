@@ -1,4 +1,5 @@
 import type { SignupForm, Section, Option } from '../shared/types';
+import '../shared/ui.css';
 import './styles.css';
 
 const status = document.querySelector<HTMLParagraphElement>('#status')!;
@@ -35,7 +36,7 @@ function iconButton(kind: 'pencil' | 'handle', label: string, click: () => void)
 }
 function inlineEditor(value: string, label: string, saveText: string, path: string, key: string, heading: boolean, actions: HTMLElement[] = []) {
   const node = element('div'); node.className = 'inline-editor';
-  const display = element(heading ? 'h2' : 'span', value); display.className = 'visible-label';
+  const display = element(key === 'title' && path === '/admin/title' ? 'h1' : heading ? 'h2' : 'span', value); display.className = 'visible-label';
   const input = field(label, value);
   input.node.firstChild?.remove();
   input.input.setAttribute('aria-label', label);
@@ -79,16 +80,28 @@ async function run(action: () => Promise<void>) {
   login.inert = true;
   status.textContent = '';
   try { await action(); status.textContent = ''; }
-  catch (error) { status.textContent = error instanceof Error ? error.message : 'Connection failed. Refresh to check whether the change saved.'; }
+  catch (error) {
+    const target = !login.hidden ? login : focused?.isConnected ? focused.closest('form') : null;
+    (target || editor.querySelector('header')!).append(status);
+    status.textContent = error instanceof Error ? error.message : 'Connection failed. Refresh to check whether the change saved.';
+  }
   finally { busy = false; content.inert = false; login.inert = false; if (focused?.isConnected) focused.focus(); }
 }
 function form(fields: HTMLElement[], submitText: string, save: () => Promise<void>) {
   const node = element('form'); const submit = element('button', submitText); submit.type = 'submit';
   node.append(...fields, submit);
   node.addEventListener('submit', event => { event.preventDefault(); void run(save); });
+  node.addEventListener('invalid', event => { node.append(status); status.textContent = (event.target as HTMLInputElement).validationMessage; }, true);
   return node;
 }
-function apply(result: SignupForm) { data = result; dirty = false; render(); }
+function apply(result: SignupForm) {
+  const focused = document.activeElement as HTMLElement | null;
+  const item = focused?.closest<HTMLElement>('[data-item]')?.dataset.item;
+  const pageTitle = focused?.closest('.page-title');
+  data = result; dirty = false; render();
+  const target = item ? content.querySelector(`[data-item="${CSS.escape(item)}"] .pencil`) : pageTitle ? content.querySelector('.page-title .pencil') : null;
+  (target as HTMLElement | null)?.focus();
+}
 function hasOtherEdits(currentForm?: HTMLFormElement): boolean {
   const others = [...content.querySelectorAll<HTMLFormElement>('form')].some(node => node !== currentForm && [...node.querySelectorAll<HTMLInputElement>('input')].some(input => input.value !== input.defaultValue));
   return (others || dirty) && !confirm('This will refresh the editor and discard other unsaved text edits or ordering. Continue?');
@@ -101,10 +114,18 @@ function editForm(fields: HTMLElement[], submitText: string, path: string, metho
   for (const input of node.querySelectorAll('input')) input.defaultValue = input.value;
   return node;
 }
+function reorder(list: HTMLElement, change: () => void) {
+  const positions = new Map([...list.children].map(node => [node as HTMLElement, (node as HTMLElement).offsetTop]));
+  change();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (const [node, top] of positions) {
+    const distance = top - node.offsetTop;
+    if (distance) { node.getAnimations().forEach(animation => animation.cancel()); node.animate([{ transform: `translateY(${distance}px)` }, { transform: 'translateY(0)' }], { duration: 160, easing: 'ease-out' }); }
+  }
+}
 function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
   const controls = element('div'); controls.className = 'reorder-controls';
   const handle = iconButton('handle', `Drag to reorder ${label}`, () => {}); handle.className = 'handle';
-  handle.setAttribute('aria-label', `Drag to reorder ${label}; use the adjacent move buttons for keyboard reordering`);
   handle.addEventListener('pointerdown', event => {
     if (busy || event.button !== 0) return;
     event.preventDefault();
@@ -118,7 +139,7 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
       const siblings = [...list.children].filter(node => node !== item) as HTMLElement[];
       const target = siblings.find(node => pointerY < node.getBoundingClientRect().top + Math.min(node.getBoundingClientRect().height, 64) / 2);
       if (item.nextElementSibling !== (target || null)) {
-        list.insertBefore(item, target || null);
+        reorder(list, () => list.insertBefore(item, target || null));
         dirty = true; list.dataset.dirty = 'true';
         status.textContent = '';
       }
@@ -140,6 +161,7 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
     const end = () => {
       cancelAnimationFrame(animation);
       item.classList.remove('dragging'); preview.remove();
+      if (moved && !matchMedia('(prefers-reduced-motion: reduce)').matches) item.animate([{ opacity: .65 }, { opacity: 1 }], { duration: 160 });
       if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
       document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', end); document.removeEventListener('pointercancel', end);
     };
@@ -150,8 +172,8 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
   handle.addEventListener('keydown', event => {
     if (busy || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
     event.preventDefault();
-    if (event.key === 'ArrowUp' && item.previousElementSibling) list.insertBefore(item, item.previousElementSibling);
-    else if (event.key === 'ArrowDown' && item.nextElementSibling) list.insertBefore(item.nextElementSibling, item);
+    if (event.key === 'ArrowUp' && item.previousElementSibling) reorder(list, () => list.insertBefore(item, item.previousElementSibling));
+    else if (event.key === 'ArrowDown' && item.nextElementSibling) reorder(list, () => list.insertBefore(item.nextElementSibling!, item));
     else return;
     dirty = true; list.dataset.dirty = 'true'; status.textContent = ''; handle.focus();
   });
@@ -224,6 +246,12 @@ login.addEventListener('submit', event => {
 document.querySelector('#refresh')!.addEventListener('click', () => {
   if (hasOtherEdits()) return;
   void run(load);
+});
+content.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'touch') return;
+  const row = (event.target as HTMLElement).closest('.option, .section, .page-title');
+  for (const node of content.querySelectorAll('.touched')) if (node !== row) node.classList.remove('touched');
+  row?.classList.add('touched');
 });
 window.addEventListener('beforeunload', event => {
   if (dirty || [...content.querySelectorAll<HTMLInputElement>('input')].some(input => input.value !== input.defaultValue)) event.preventDefault();

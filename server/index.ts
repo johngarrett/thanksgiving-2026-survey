@@ -16,6 +16,11 @@ function notes(value: unknown): string | null {
   return text(value, 'Notes', 2048);
 }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+function ownerHash(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) fail(400, 'Invalid owner ID.');
+  return hash(value as string);
+}
 
 export function createApp(config: Config) {
   if (!config.adminPassword) throw new Error('ADMIN_PASSWORD is required.');
@@ -26,6 +31,7 @@ export function createApp(config: Config) {
   // Password changes invalidate existing sessions, including after a restart.
   const sessionHash = (token: string) => hash(`${config.adminPassword}\0${token}`);
   const app = express();
+  const subscribers = new Set<Response>();
   app.disable('x-powered-by');
   const cookieName = config.secureCookies ? '__Host-thanksgiving_admin' : 'thanksgiving_admin';
   const cookieOptions = { httpOnly: true, secure: config.secureCookies, sameSite: 'strict' as const, path: '/' };
@@ -35,7 +41,7 @@ export function createApp(config: Config) {
     const adminRequest = req.path === '/admin' || req.path.startsWith('/admin/');
     if (!adminRequest) {
       res.set('Access-Control-Allow-Origin', '*');
-      res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       res.set('Access-Control-Allow-Headers', 'Content-Type');
     }
     if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -50,27 +56,61 @@ export function createApp(config: Config) {
     next();
   });
   app.use(express.json({ limit: '32kb' }));
+  app.use('/api', (req, res, next) => {
+    if (['POST', 'PUT', 'DELETE'].includes(req.method) && !['/admin/login', '/admin/logout', '/claims/owned'].includes(req.path)) {
+      res.once('finish', () => {
+        if (res.statusCode >= 400 || !subscribers.size) return;
+        const event = `data: ${JSON.stringify(readForm(db))}\n\n`;
+        for (const subscriber of subscribers) subscriber.write(event);
+      });
+    }
+    next();
+  });
   app.get('/api/form', (_req, res) => res.json(readForm(db)));
+  app.post('/api/claims/owned', (req, res) => {
+    const owner = ownerHash(req.body?.ownerId);
+    res.json(db.query('SELECT option_id AS optionId, is_custom AS custom FROM claim_owners WHERE owner_hash = ?').all(owner));
+  });
+  app.delete('/api/claims/:id', (req, res) => {
+    const owner = ownerHash(req.body?.ownerId);
+    const id = req.params.id as string;
+    db.transaction(() => {
+      const claim = db.query('SELECT is_custom FROM claim_owners WHERE option_id = ? AND owner_hash = ?').get(id, owner) as { is_custom: number } | null;
+      if (!claim) fail(403, 'Only your own claims can be deleted.');
+      if (claim!.is_custom) db.query('DELETE FROM options WHERE id = ?').run(id);
+      else db.query('DELETE FROM claims WHERE option_id = ?').run(id);
+    }).immediate();
+    res.json(readForm(db));
+  });
   app.post('/api/claims', (req, res) => {
+    const owner = ownerHash(req.body?.ownerId);
     const name = text(req.body?.name, 'Name', 100);
     const selections = req.body?.selections;
     const custom = req.body?.custom ?? [];
     if (!Array.isArray(selections) || !Array.isArray(custom) || selections.length + custom.length < 1 || selections.length + custom.length > 100) fail(400, 'Select 1–100 options.');
-    const chosen = selections.map((item: any) => ({ id: text(item?.optionId, 'Option ID'), notes: notes(item?.notes) }));
+    const chosen = selections.map((item: any) => ({ id: text(item?.optionId, 'Option ID'), notes: notes(item?.notes), label: item?.label === undefined ? undefined : text(item.label, 'Custom title') }));
     const added = custom.map((item: any) => ({ sectionId: text(item?.sectionId, 'Section ID'), label: text(item?.label, 'Custom option'), notes: notes(item?.notes) }));
     if (new Set(chosen.map((item: { id: string }) => item.id)).size !== chosen.length) fail(400, 'Duplicate selections are not allowed.');
     db.transaction(() => {
       for (const item of chosen) {
-        if (!db.query('SELECT id FROM options WHERE id = ?').get(item.id) || db.query('SELECT option_id FROM claims WHERE option_id = ?').get(item.id)) fail(409, 'Some selections are no longer available. Review the refreshed form.');
+        const claimed = db.query('SELECT option_id FROM claims WHERE option_id = ?').get(item.id);
+        const owned = owner && db.query('SELECT option_id FROM claim_owners WHERE option_id = ? AND owner_hash = ?').get(item.id, owner);
+        if (!db.query('SELECT id FROM options WHERE id = ?').get(item.id) || (claimed && !owned)) fail(409, 'Some selections are no longer available. Review the refreshed form.');
+        if (item.label !== undefined && (!owner || !db.query('SELECT option_id FROM claim_owners WHERE option_id = ? AND owner_hash = ? AND is_custom = 1').get(item.id, owner))) fail(403, 'Only your custom entries can be renamed.');
       }
       for (const item of added) {
         if (!db.query('SELECT id FROM sections WHERE id = ?').get(item.sectionId)) fail(409, 'A section was removed. Review the refreshed form.');
       }
-      for (const item of chosen) db.query('INSERT INTO claims VALUES (?, ?, ?)').run(item.id, name, item.notes);
+      for (const item of chosen) {
+        db.query('INSERT INTO claims VALUES (?, ?, ?) ON CONFLICT(option_id) DO UPDATE SET guest_name = excluded.guest_name, recipe_url = excluded.recipe_url').run(item.id, name, item.notes);
+        if (owner) db.query('INSERT OR IGNORE INTO claim_owners (option_id, owner_hash) VALUES (?, ?)').run(item.id, owner);
+        if (item.label !== undefined) db.query('UPDATE options SET label = ? WHERE id = ?').run(item.label, item.id);
+      }
       for (const item of added) {
         const id = crypto.randomUUID();
         db.query('INSERT INTO options VALUES (?, ?, ?, (SELECT COALESCE(MAX(display_order), -1) + 1 FROM options WHERE section_id = ?))').run(id, item.sectionId, item.label, item.sectionId);
         db.query('INSERT INTO claims VALUES (?, ?, ?)').run(id, name, item.notes);
+        if (owner) db.query('INSERT INTO claim_owners VALUES (?, ?, 1)').run(id, owner);
       }
     }).immediate();
     res.status(201).json(readForm(db));
@@ -101,6 +141,14 @@ export function createApp(config: Config) {
     next();
   });
   app.get('/api/admin/session', (_req, res) => res.json({ ok: true }));
+  app.get('/api/admin/events', (_req, res) => {
+    res.set({ 'Content-Type': 'text/event-stream', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders();
+    subscribers.add(res);
+    res.write(`data: ${JSON.stringify(readForm(db))}\n\n`);
+    const heartbeat = setInterval(() => res.write(': keepalive\n\n'), 25000);
+    res.once('close', () => { clearInterval(heartbeat); subscribers.delete(res); });
+  });
   app.post('/api/admin/logout', (req, res) => {
     const token = req.headers.cookie?.split(';').map(part => part.trim()).find(part => part.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
     if (token) db.query('DELETE FROM sessions WHERE token_hash = ?').run(sessionHash(token));

@@ -15,6 +15,13 @@ const saveStatus = document.querySelector<HTMLParagraphElement>('#save-status')!
 const api = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const chosen = new Map<string, string>();
 const custom = new Map<string, { label: string; notes: string }>();
+let ownerId: string = crypto.randomUUID();
+try {
+  ownerId = localStorage.getItem('thanksgiving-owner-id') || ownerId;
+  localStorage.setItem('thanksgiving-owner-id', ownerId);
+} catch { /* Ownership lasts only for this page when storage is unavailable. */ }
+let owned = new Map<string, boolean>();
+const editedLabels = new Map<string, string>();
 let data: SignupForm | undefined;
 let saving = false;
 let completed = false;
@@ -48,20 +55,39 @@ function notesInput(value: string, onInput: (value: string) => void) {
   input.addEventListener('input', () => { resizeNotes(input); onInput(input.value); });
   label.append(input); return label;
 }
+async function changeOwnClaim(optionId: string, method: 'POST' | 'DELETE', body: unknown) {
+  if (saving) return;
+  saving = true; refreshRequest++; signup.inert = true; status.textContent = 'Saving…';
+  try {
+    const path = method === 'DELETE' ? `/api/claims/${encodeURIComponent(optionId)}` : '/api/claims';
+    const response = await fetch(`${api}${path}`, { method, credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Unable to save. Try again.');
+    chosen.delete(optionId); editedLabels.delete(optionId);
+    if (method === 'DELETE') owned.delete(optionId);
+    data = result; render(result); status.textContent = 'Changes saved.';
+  } catch (error) { status.textContent = error instanceof Error ? error.message : 'Unable to save. Try again.'; }
+  finally { saving = false; signup.inert = false; submit.disabled = !data; }
+}
 function render(form: SignupForm) {
   document.querySelector('#title')!.textContent = form.title;
   sections.replaceChildren();
-  const available = new Set(form.sections.flatMap(section => section.options.filter(option => option.claimedBy === null).map(option => option.id)));
+  const available = new Set(form.sections.flatMap(section => section.options.filter(option => option.claimedBy === null || owned.has(option.id)).map(option => option.id)));
   for (const id of chosen.keys()) if (!available.has(id)) chosen.delete(id);
   for (const id of custom.keys()) if (!form.sections.some(section => section.id === id)) custom.delete(id);
   for (const section of form.sections) {
     const fieldset = element('fieldset'); fieldset.append(element('legend', section.title));
     for (const option of section.options) {
+      const mine = owned.has(option.id) && option.claimedBy !== null;
+      if (mine && !chosen.has(option.id)) chosen.set(option.id, option.notes || '');
+      if (mine && !name.value) name.value = option.claimedBy!;
       const row = element('div'); row.className = 'option';
       const label = element('label');
       const check = element('input'); check.type = 'checkbox'; check.disabled = option.claimedBy !== null; check.checked = chosen.has(option.id);
-      row.classList.toggle('claimed', check.disabled);
-      label.append(check, document.createTextNode(` ${option.label}`));
+      row.classList.toggle('claimed', check.disabled && !mine);
+      row.classList.toggle('mine', mine);
+      const titleText = element('span', option.label);
+      label.append(check, titleText);
       row.append(label);
       if (option.claimedBy !== null) {
         const claim = element('p', '↳ Claimed by '); claim.className = 'details claim';
@@ -70,10 +96,18 @@ function render(form: SignupForm) {
       if (option.notes) {
         const note = element('p', `↳ ${option.notes}`); note.className = 'details notes'; row.append(note);
       }
-      if (option.claimedBy === null) {
-        const details = element('div'); details.className = 'details'; details.hidden = !check.checked;
+      if (option.claimedBy === null || mine) {
+        const details = element('div'); details.className = 'details'; details.hidden = mine || !check.checked;
+        let title: HTMLInputElement | undefined;
+        if (mine && owned.get(option.id)) {
+          title = element('input'); title.type = 'text'; title.maxLength = 200; title.required = true; title.hidden = true; title.disabled = true;
+          title.value = editedLabels.get(option.id) ?? option.label;
+          title.setAttribute('aria-label', `Title for ${option.label}`);
+          title.addEventListener('input', () => editedLabels.set(option.id, title!.value));
+          label.append(title);
+        }
         details.append(notesInput(chosen.get(option.id) || '', value => chosen.set(option.id, value)));
-        details.querySelector('textarea')!.disabled = !check.checked;
+        details.querySelector('textarea')!.disabled = mine || !check.checked;
         check.addEventListener('change', () => {
           details.hidden = !check.checked;
           details.querySelector('textarea')!.disabled = !check.checked;
@@ -81,6 +115,39 @@ function render(form: SignupForm) {
           if (check.checked) chosen.set(option.id, details.querySelector('textarea')!.value); else chosen.delete(option.id);
         });
         row.append(details);
+        if (mine) {
+          const pencil = element('button'); pencil.type = 'button'; pencil.className = 'pencil';
+          pencil.setAttribute('aria-label', `Edit ${option.label}`);
+          pencil.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.5V21h3.5L18 9.5 14.5 6ZM20.7 6.8a1 1 0 0 0 0-1.4l-2.1-2.1a1 1 0 0 0-1.4 0L15.6 5 19 8.4Z"/></svg>';
+          const note = details.querySelector('textarea')!;
+          const noteText = row.querySelector<HTMLElement>('.notes');
+          pencil.addEventListener('click', () => {
+            details.hidden = false; pencil.hidden = true;
+            if (noteText) noteText.hidden = true;
+            if (title) { titleText.hidden = true; title.hidden = false; title.disabled = false; }
+            note.disabled = false; (title || note).focus(); resizeNotes(note);
+          });
+          const controls = element('div'); controls.className = 'edit-actions';
+          const save = element('button', 'Save'); save.type = 'button';
+          save.addEventListener('click', () => {
+            if (!note.reportValidity() || (title && !title.reportValidity())) return;
+            void changeOwnClaim(option.id, 'POST', { ownerId, name: option.claimedBy, selections: [{ optionId: option.id, notes: note.value, ...(title ? { label: title.value } : {}) }] });
+          });
+          const cancel = element('button', 'Cancel'); cancel.type = 'button';
+          cancel.addEventListener('click', () => {
+            chosen.set(option.id, option.notes || ''); editedLabels.delete(option.id);
+            note.value = option.notes || ''; note.disabled = true; details.hidden = true;
+            if (title) { title.value = option.label; title.hidden = true; title.disabled = true; titleText.hidden = false; }
+            if (noteText) noteText.hidden = false;
+            pencil.hidden = false; pencil.focus();
+          });
+          const remove = element('button', 'Delete'); remove.type = 'button'; remove.className = 'delete';
+          remove.addEventListener('click', () => {
+            if (confirm(owned.get(option.id) ? `Delete “${option.label}” and your claim?` : `Release your claim on “${option.label}”?`)) void changeOwnClaim(option.id, 'DELETE', { ownerId });
+          });
+          controls.append(save, cancel, remove); details.append(controls);
+          label.after(pencil);
+        }
       }
       fieldset.append(row);
     }
@@ -125,10 +192,15 @@ async function refresh() {
   if (saving || completed) return;
   const request = ++refreshRequest;
   try {
-    const response = await fetch(`${api}/api/form`, { credentials: 'omit', cache: 'no-store' });
-    if (!response.ok) throw new Error();
+    const [response, ownership] = await Promise.all([
+      fetch(`${api}/api/form`, { credentials: 'omit', cache: 'no-store' }),
+      fetch(`${api}/api/claims/owned`, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ownerId }) }),
+    ]);
+    if (!response.ok || !ownership.ok) throw new Error();
     const result: SignupForm = await response.json();
+    const ids: { optionId: string; custom: number }[] = await ownership.json();
     if (request !== refreshRequest || saving) return;
+    owned = new Map(ids.map(item => [item.optionId, Boolean(item.custom)]));
     data = result; render(result); status.classList.remove('selection-error'); status.textContent = '';
   } catch { if (request === refreshRequest) status.textContent = 'Could not refresh availability. Check your connection and try again.'; }
 }
@@ -150,8 +222,9 @@ saveForm.addEventListener('submit', async event => {
   event.preventDefault();
   if (saving || !data) return;
   const payload: ClaimInput = {
+    ownerId,
     name: name.value,
-    selections: [...chosen].map(([optionId, notes]) => ({ optionId, notes })),
+    selections: [...chosen].map(([optionId, notes]) => ({ optionId, notes, label: editedLabels.get(optionId) })),
     custom: [...custom].map(([sectionId, entry]) => ({ sectionId, ...entry })),
   };
   saving = true; refreshRequest++; saveButton.disabled = true; cancel.disabled = true; submit.disabled = true;
@@ -168,6 +241,9 @@ saveForm.addEventListener('submit', async event => {
     const confirmation = element('p', 'Your selections are saved.');
     confirmation.setAttribute('role', 'status'); confirmation.tabIndex = -1;
     document.querySelector('main')!.replaceChildren(confirmation); confirmation.focus();
+    const edit = element('button', 'Edit my notes'); edit.type = 'button';
+    edit.addEventListener('click', () => location.reload());
+    confirmation.after(edit);
     rainTurkeyLegs();
   } catch {
     saveStatus.textContent = 'Connection lost. Your save may have completed. Close this dialog and reload the page before trying again, especially for custom choices.';

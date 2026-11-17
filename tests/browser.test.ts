@@ -2,6 +2,24 @@ import { test, expect, type Page } from '@playwright/test';
 
 const publicUrl = 'http://127.0.0.1:5373';
 const adminUrl = 'http://127.0.0.1:5374/admin/';
+
+test('admin refreshes changed data while preserving an open editor', async ({ page }) => {
+  await adminLogin(page);
+  const updateTitle = async (title: string) => {
+    const response = await page.request.put(`${adminUrl.replace('/admin/', '')}/api/admin/title`, {
+      headers: { Origin: new URL(adminUrl).origin }, data: { title },
+    });
+    expect(response.ok()).toBe(true);
+  };
+  await updateTitle('Updated remotely');
+  await expect(page.getByRole('heading', { name: 'Updated remotely', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit Updated remotely', exact: true }).click();
+  await page.getByLabel('Page title', { exact: true }).fill('My unsaved title');
+  await updateTitle('Another remote update');
+  await expect(page.getByLabel('Page title', { exact: true })).toHaveValue('My unsaved title');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).filter({ visible: true }).click();
+  await expect(page.getByRole('heading', { name: 'Another remote update', exact: true })).toBeVisible();
+});
 async function adminLogin(page: Page, url = adminUrl) {
   await page.goto(url);
   await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
@@ -34,22 +52,41 @@ test('public modal, multiple choices, custom food, plain notes, and returning gu
   await page.getByRole('textbox', { name: 'Your name', exact: true }).fill('Alex');
   await page.locator('#save').click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
-  await expect(page.locator('main')).toHaveText('Your selections are saved.');
+  await expect(page.locator('main')).toContainText('Your selections are saved.');
   await expect(page.locator('.turkey-rain span')).toHaveCount(300);
   await expect(page.locator('.turkey-rain span').first()).toHaveCSS('animation-iteration-count', 'infinite');
   await expect(page.getByRole('checkbox')).toHaveCount(0);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await expect(page.locator('main')).toHaveText('Your selections are saved.');
+  await expect(page.locator('main')).toContainText('Your selections are saved.');
   await page.reload();
   await expect(food.getByRole('checkbox', { name: 'Pumpkin pie' })).toBeDisabled();
   await expect(food.getByText('↳ Claimed by Alex', { exact: true })).toHaveCount(2);
   await expect(food.getByRole('checkbox', { name: 'Mac and cheese' })).toBeDisabled();
   await expect(food.locator('.notes').last()).toHaveText('↳ https://example.com/pie');
   await expect(food.locator('.notes a')).toHaveCount(0);
-  await expect(food.getByRole('checkbox', { name: 'Pumpkin pie' })).toBeDisabled();
+  const pie = food.locator('.option').filter({ has: page.getByLabel('Title for Pumpkin pie', { exact: true }) });
+  await expect(pie).toHaveClass(/mine/);
+  await expect(pie.getByLabel('Notes')).not.toBeVisible();
+  await pie.getByRole('button', { name: 'Edit Pumpkin pie', exact: true }).click();
+  await expect(pie.getByText('↳ https://example.com/pie', { exact: true })).not.toBeVisible();
+  await expect(pie.getByLabel('Notes')).toHaveCSS('border-top-style', 'solid');
+  await expect(pie.getByLabel('Notes')).toHaveCSS('border-top-width', '2px');
+  await expect(pie.getByLabel('Title for Pumpkin pie', { exact: true })).toHaveCSS('border-top-width', '2px');
+  await pie.getByLabel('Notes').fill('Discard this');
+  await pie.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(pie.getByText('↳ https://example.com/pie', { exact: true })).toBeVisible();
+  await pie.getByRole('button', { name: 'Edit Pumpkin pie', exact: true }).click();
+  await expect(pie.getByLabel('Notes')).toHaveValue('https://example.com/pie');
+  await pie.getByLabel('Title for Pumpkin pie', { exact: true }).fill('Cherry pie');
+  await pie.getByLabel('Notes').fill('Bring whipped cream');
+  await pie.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(food.getByRole('checkbox', { name: 'Cherry pie', exact: true })).toBeChecked();
+  await expect(food.getByText('↳ Bring whipped cream', { exact: true })).toBeVisible();
+
+  await expect(food.getByRole('checkbox', { name: 'Cherry pie' })).toBeDisabled();
   // Unchecked note fields must not interfere with submitting another selection.
   await food.getByRole('checkbox', { name: 'Salad', exact: true }).check();
-  await food.getByLabel('Notes').nth(3).fill('bad-url');
+  await food.locator('.option').filter({ has: page.getByRole('checkbox', { name: 'Salad', exact: true }) }).getByLabel('Notes').fill('bad-url');
   await food.getByRole('checkbox', { name: 'Salad', exact: true }).uncheck();
   await food.getByRole('checkbox', { name: 'Stuffing', exact: true }).check();
   await page.getByRole('button', { name: 'Submit' }).click();

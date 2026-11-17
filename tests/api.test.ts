@@ -30,7 +30,59 @@ beforeEach(async () => {
 });
 afterEach(async () => { await new Promise<void>(resolve => server.close(() => resolve())); db.close(); });
 
+test('authenticated admin events push public claims without polling', async () => {
+  expect((await request('/admin/events')).status).toBe(401);
+  await login();
+  const controller = new AbortController();
+  const response = await fetch(`${base}/api/admin/events`, { headers: { Cookie: cookie }, signal: controller.signal });
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  const nextForm = async () => {
+    let event = '';
+    while (!event.includes('\n\n')) event += decoder.decode((await reader.read()).value, { stream: true });
+    return JSON.parse(event.slice(6).trim()) as SignupForm;
+  };
+  try {
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    const initial = await nextForm();
+    const option = initial.sections[0].options[0];
+    expect((await request('/claims', 'POST', { name: 'Live guest', selections: [{ optionId: option.id }] })).status).toBe(201);
+    const updated = await nextForm();
+    expect(updated.sections[0].options[0].claimedBy).toBe('Live guest');
+  } finally { controller.abort(); await reader.cancel().catch(() => {}); }
+});
+
 describe('public signup', () => {
+  test('only the stored owner ID can edit notes and rename owned custom entries', async () => {
+    const ownerId = crypto.randomUUID(), stranger = crypto.randomUUID();
+    const section = (await form()).sections[0];
+    const preset = section.options[0];
+    const response = await request('/claims', 'POST', { ownerId, name: 'Alex', selections: [{ optionId: preset.id, notes: 'Original' }], custom: [{ sectionId: section.id, label: 'Pie', notes: 'Apple' }] });
+    expect(response.status).toBe(201);
+    const custom = ((await response.json()) as SignupForm).sections[0].options.at(-1)!;
+    expect(await (await request('/claims/owned', 'POST', { ownerId })).json()).toEqual([{ optionId: preset.id, custom: 0 }, { optionId: custom.id, custom: 1 }]);
+    expect(await (await request('/claims/owned', 'POST', { ownerId: stranger })).json()).toEqual([]);
+    for (const id of [undefined, stranger]) {
+      expect((await request('/claims', 'POST', { ownerId: id, name: 'Alex', selections: [{ optionId: preset.id, notes: 'Stolen' }] })).status).toBe(409);
+    }
+    expect((await request('/claims', 'POST', { ownerId, name: 'Alex', selections: [{ optionId: preset.id, label: 'Rename preset', notes: 'No' }] })).status).toBe(403);
+    expect((await request('/claims', 'POST', { ownerId, name: 'Alex', selections: [{ optionId: preset.id, notes: 'Updated' }, { optionId: custom.id, label: 'Pumpkin pie', notes: '' }] })).status).toBe(201);
+    const updated = (await form()).sections[0];
+    expect(updated.options[0].notes).toBe('Updated');
+    expect(updated.options.at(-1)).toMatchObject({ id: custom.id, label: 'Pumpkin pie', notes: null });
+    expect(updated.options).toHaveLength(section.options.length + 1);
+    expect(JSON.stringify(await form())).not.toContain(ownerId);
+    expect((await request(`/claims/${custom.id}`, 'DELETE', { ownerId: stranger })).status).toBe(403);
+    expect((await request(`/claims/${custom.id}`, 'DELETE', { ownerId })).status).toBe(200);
+    expect((await form()).sections[0].options.some(option => option.id === custom.id)).toBe(false);
+    expect((await request(`/claims/${preset.id}`, 'DELETE', { ownerId })).status).toBe(200);
+    expect((await form()).sections[0].options[0]).toMatchObject({ id: preset.id, claimedBy: null, notes: null });
+    expect(db.query('SELECT * FROM claim_owners WHERE option_id = ?').get(preset.id)).toBeNull();
+    await request('/claims', 'POST', { ownerId, name: 'Alex', selections: [{ optionId: preset.id }] });
+    await login();
+    await request(`/admin/options/${preset.id}/claim`, 'DELETE', {}, true);
+    expect(db.query('SELECT * FROM claim_owners WHERE option_id = ?').get(preset.id)).toBeNull();
+  });
   test('seeds both sections and ten options; JSON includes optional notes', async () => {
     const data = await form(); expect(data.sections).toHaveLength(2);
     expect(data.sections.flatMap(s => s.options)).toHaveLength(10);
@@ -149,6 +201,25 @@ test('database data and sessions survive reopening without reseeding', () => {
     expect(readForm(disk).sections).toHaveLength(2);
     expect(disk.query('SELECT token_hash FROM sessions').all()).toHaveLength(1);
     disk.close();
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('older ownership tables gain is_custom without losing claims or owner IDs', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'thanksgiving-'));
+  try {
+    const path = join(folder, 'test.sqlite');
+    let disk = openDatabase(path);
+    const id = readForm(disk).sections[0].options[0].id;
+    disk.query('INSERT INTO claims VALUES (?, ?, ?)').run(id, 'Alex', 'Saved note');
+    disk.exec('ALTER TABLE claim_owners DROP COLUMN is_custom');
+    disk.query('INSERT INTO claim_owners VALUES (?, ?)').run(id, 'saved-owner-hash');
+    disk.close();
+    for (let i = 0; i < 2; i++) {
+      disk = openDatabase(path);
+      expect(disk.query('SELECT * FROM claim_owners WHERE option_id = ?').get(id)).toEqual({ option_id: id, owner_hash: 'saved-owner-hash', is_custom: 0 });
+      expect(readForm(disk).sections[0].options[0]).toMatchObject({ claimedBy: 'Alex', notes: 'Saved note' });
+      disk.close();
+    }
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 

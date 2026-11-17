@@ -6,7 +6,17 @@ legend { margin-bottom: 1rem; }
 .details { margin: .5rem 0 .5rem var(--control-column); }
 .details label { display: block; }
 .custom-choice > input { display: block; margin: .5rem 0 .5rem var(--control-column); width: min(24rem, calc(100% - var(--control-column))); }
-.option.claimed > label, .option.claimed > .claim, .option.claimed > .notes { color: var(--muted); }
+.option.claimed > label, .option.claimed > .claim, .option.claimed > .notes { color: #888; font-style: italic; }
+.option.mine { position: relative; color: #005fcc; }
+.option.mine > label { padding-right: 2.5rem; }
+.option.mine .pencil { position: absolute; top: 0; right: 0; display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: .25rem; color: inherit; }
+.option.mine .pencil svg { width: 1rem; height: 1rem; fill: currentColor; }
+.option.mine input, .option.mine textarea { color: inherit; }
+.option.mine > label > input[type='text'], .option.mine textarea { border: 2px solid #005fcc; padding: .375rem .5rem; width: 100%; }
+.option.mine .edit-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.option.mine .edit-actions button { padding: .25rem .5rem; }
+.option.mine .edit-actions button:first-child { font-weight: bold; }
+.option.mine .edit-actions .delete { margin-left: auto; color: var(--error); }
 #submit, #save { font-weight: bold; padding-left: 0; padding-right: 0; }
 #submit { min-height: 2.75rem; }
 dialog { box-sizing: border-box; width: min(38rem, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); border: 0; padding: 3.5rem 2rem 2rem; }

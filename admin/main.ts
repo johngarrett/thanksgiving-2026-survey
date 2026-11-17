@@ -91,6 +91,7 @@ async function run(action: () => Promise<void>) {
     busy = false; content.inert = false; login.inert = false;
     const target = focused?.isConnected ? focused : item ? content.querySelector(`[data-item="${CSS.escape(item)}"] .pencil`) : pageTitle ? content.querySelector('.page-title .pencil') : null;
     (target as HTMLElement | null)?.focus();
+    applyPendingUpdate();
   }
 }
 function form(fields: HTMLElement[], submitText: string, save: () => Promise<void>) {
@@ -100,7 +101,7 @@ function form(fields: HTMLElement[], submitText: string, save: () => Promise<voi
   node.addEventListener('invalid', event => { node.append(status); status.textContent = (event.target as HTMLInputElement).validationMessage; }, true);
   return node;
 }
-function apply(result: SignupForm) { data = result; dirty = false; render(); }
+function apply(result: SignupForm) { pendingUpdate = undefined; data = result; dirty = false; render(); }
 function hasOtherEdits(currentForm?: HTMLFormElement): boolean {
   const others = [...content.querySelectorAll<HTMLFormElement>('form')].some(node => node !== currentForm && [...node.querySelectorAll<HTMLInputElement>('input')].some(input => input.value !== input.defaultValue));
   return (others || dirty) && !confirm('This will refresh the editor and discard other unsaved text edits or ordering. Continue?');
@@ -237,7 +238,23 @@ function render() {
 }
 async function load() {
   apply(await api('/form')); login.hidden = true; editor.hidden = false;
+  if (!events) {
+    events = new EventSource('/api/admin/events');
+    events.onmessage = event => { pendingUpdate = JSON.parse(event.data); applyPendingUpdate(); };
+  }
 }
+let events: EventSource | undefined;
+let pendingUpdate: SignupForm | undefined;
+function applyPendingUpdate() {
+  if (!pendingUpdate || document.hidden || editor.hidden || busy || dirty
+    || content.querySelector('form:not([hidden]), .dragging')) return;
+  if (JSON.stringify(pendingUpdate) !== JSON.stringify(data)) apply(pendingUpdate);
+  else pendingUpdate = undefined;
+}
+for (const event of ['click', 'keydown', 'pointerup', 'pointercancel']) {
+  content.addEventListener(event, () => setTimeout(applyPendingUpdate, 0));
+}
+document.addEventListener('visibilitychange', applyPendingUpdate);
 login.addEventListener('submit', event => {
   event.preventDefault();
   void run(async () => { await api('/admin/login', 'POST', { password: new FormData(login).get('password') }); login.reset(); await load(); });

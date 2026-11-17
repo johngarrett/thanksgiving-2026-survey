@@ -15,8 +15,15 @@ export function openDatabase(path: string) {
     CREATE TABLE IF NOT EXISTS sections (id TEXT PRIMARY KEY, title TEXT NOT NULL, display_order INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS options (id TEXT PRIMARY KEY, section_id TEXT NOT NULL REFERENCES sections(id) ON DELETE CASCADE, label TEXT NOT NULL, display_order INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS claims (option_id TEXT PRIMARY KEY REFERENCES options(id) ON DELETE CASCADE, guest_name TEXT NOT NULL, recipe_url TEXT);
+    CREATE TABLE IF NOT EXISTS claim_owners (option_id TEXT PRIMARY KEY REFERENCES claims(option_id) ON DELETE CASCADE, owner_hash TEXT NOT NULL, is_custom INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
   `);
+  db.transaction(() => {
+    const columns = db.query('PRAGMA table_info(claim_owners)').all() as { name: string }[];
+    if (!columns.some(column => column.name === 'is_custom')) {
+      db.exec('ALTER TABLE claim_owners ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0');
+    }
+  })();
   db.transaction(() => {
     const columns = db.query('PRAGMA table_info(sections)').all() as { name: string }[];
     if (columns.some(column => column.name === 'customPlaceholder')) return;

@@ -2,9 +2,11 @@ import { test, expect, type Page } from '@playwright/test';
 
 const publicUrl = 'http://127.0.0.1:5373';
 const adminUrl = 'http://127.0.0.1:5374/admin/';
-async function adminLogin(page: Page) {
-  await page.goto(adminUrl);
-  await page.getByLabel('Admin password').fill('browser-test-password');
+async function adminLogin(page: Page, url = adminUrl) {
+  await page.goto(url);
+  await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/admin-login.png' });
+  await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible();
 }
@@ -12,6 +14,7 @@ async function adminLogin(page: Page) {
 test('public modal, multiple choices, custom food, recipe links, and returning guests', async ({ page }) => {
   await page.goto(publicUrl);
   await expect(page.getByRole('button', { name: 'Submit selections' })).toBeEnabled();
+  await page.screenshot({ path: 'test-results/public-desktop.png' });
   const food = page.getByRole('group', { name: 'I sign up to make:' });
   await food.getByRole('checkbox', { name: 'Mac and cheese', exact: true }).check();
   await food.getByLabel('Recipe URL (optional)').first().fill('https://example.com/mac');
@@ -22,6 +25,7 @@ test('public modal, multiple choices, custom food, recipe links, and returning g
   await page.getByRole('button', { name: 'Submit selections' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByLabel('Your name')).toBeFocused();
+  await page.screenshot({ path: 'test-results/name-modal.png' });
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await page.getByRole('button', { name: 'Submit selections' }).click();
@@ -70,7 +74,7 @@ test('conflict preserves name and remaining selections; refresh errors are visib
   await other.close();
 });
 
-test('admin edits, assigns, clears, reorders by pointer and keyboard, and deletes', async ({ page }) => {
+test('admin edits, clears, reorders by pointer and keyboard, and deletes', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1600 });
   await adminLogin(page);
   await page.getByLabel('New section title').fill('Desserts');
@@ -80,9 +84,16 @@ test('admin edits, assigns, clears, reorders by pointer and keyboard, and delete
   await desserts.getByRole('button', { name: 'Add option', exact: true }).click();
   await desserts.getByLabel('New option').fill('Brownies');
   await desserts.getByRole('button', { name: 'Add option', exact: true }).click();
-  const apple = desserts.locator('.option').first();
-  await apple.getByLabel('Guest name').fill('Pat');
-  await apple.getByRole('button', { name: 'Assign claim' }).click();
+  await expect(page.getByRole('button', { name: 'Assign claim' })).toHaveCount(0);
+  const guest = await page.context().newPage();
+  await guest.goto(publicUrl);
+  await guest.getByRole('checkbox', { name: 'Apple pie', exact: true }).check();
+  await guest.getByRole('button', { name: 'Submit selections' }).click();
+  await guest.getByLabel('Your name').fill('Pat');
+  await guest.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(guest.getByRole('dialog')).not.toBeVisible();
+  await guest.close();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
   await expect(desserts).toContainText('Claimed by Pat');
   page.once('dialog', dialog => dialog.accept());
   await desserts.getByRole('button', { name: 'Clear claim' }).click();
@@ -93,7 +104,7 @@ test('admin edits, assigns, clears, reorders by pointer and keyboard, and delete
   const last = list.locator(':scope > [data-item]').last();
   const handle = first.locator('.handle');
   await handle.scrollIntoViewIfNeeded();
-  const a = await handle.boundingBox(), b = await last.boundingBox();
+  const a = await handle.boundingBox(), b = await last.locator('.handle').boundingBox();
   await page.mouse.move(a!.x + a!.width / 2, a!.y + a!.height / 2);
   await page.mouse.down();
   await page.mouse.move(b!.x + b!.width / 2, b!.y + b!.height - 5, { steps: 12 });
@@ -126,4 +137,36 @@ test('mobile form fits the viewport and shows custom task inputs', async ({ page
   await tasks.getByLabel('Other (add your own)').fill('');
   await expect(tasks.locator('.custom-choice').getByLabel('Recipe URL (optional)')).not.toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+
+test('admin login and edits work through the localhost development proxy', async ({ page }) => {
+  await adminLogin(page, 'http://localhost:5374/admin/');
+  await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save title', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Saved.');
+});
+
+
+test('dragging sections at a normal viewport uses their headers and saves the order', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await adminLogin(page);
+  const list = page.locator('[data-list="sections"]');
+  const second = list.locator(':scope > [data-item]').nth(1);
+  const secondId = await second.getAttribute('data-item');
+  const handle = second.locator(':scope > div > .handle').first();
+  await handle.scrollIntoViewIfNeeded();
+  const start = await handle.boundingBox();
+  await page.mouse.move(start!.x + 10, start!.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(start!.x + 10, 20, { steps: 10 });
+  await expect(page.locator('.drag-preview')).toBeVisible();
+  // Stay at the upper edge to exercise automatic scrolling through tall sections.
+  await expect.poll(async () => page.evaluate(() => window.scrollY), { timeout: 10000 }).toBe(0);
+  await page.mouse.move(start!.x + 10, 25);
+  await page.mouse.up();
+  await expect(list.locator(':scope > [data-item]').first()).toHaveAttribute('data-item', secondId!);
+  await page.getByRole('button', { name: 'Save order', exact: true }).last().click();
+  await page.reload();
+  await expect(list.locator(':scope > [data-item]').first()).toHaveAttribute('data-item', secondId!);
 });

@@ -24,7 +24,9 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, content?: string
   return node;
 }
 function urlInput(value: string, onInput: (value: string) => void) {
-  const label = element('label', 'Recipe URL (optional) ');
+  const label = element('label', 'Recipe URL ');
+  const optional = element('span', '(optional)'); optional.className = 'muted';
+  label.append(optional, document.createTextNode(' '));
   const input = element('input');
   input.type = 'url'; input.maxLength = 2048; input.placeholder = 'https://'; input.value = value;
   input.addEventListener('input', () => onInput(input.value));
@@ -50,6 +52,7 @@ function render(form: SignupForm) {
       const row = element('div'); row.className = 'option';
       const label = element('label');
       const check = element('input'); check.type = 'checkbox'; check.disabled = option.claimedBy !== null; check.checked = chosen.has(option.id);
+      row.classList.toggle('selected', check.checked || check.disabled);
       label.append(check, document.createTextNode(` ${option.label}${option.claimedBy !== null ? ` — ${option.claimedBy}` : ''}`));
       row.append(label);
       const link = recipeLink(option.recipeUrl);
@@ -60,6 +63,7 @@ function render(form: SignupForm) {
         details.querySelector('input')!.disabled = !check.checked;
         check.addEventListener('change', () => {
           details.hidden = !check.checked;
+          row.classList.toggle('selected', check.checked);
           details.querySelector('input')!.disabled = !check.checked;
           if (check.checked) chosen.set(option.id, details.querySelector('input')!.value); else chosen.delete(option.id);
         });
@@ -68,7 +72,9 @@ function render(form: SignupForm) {
       fieldset.append(row);
     }
     const row = element('div'); row.className = 'option custom-choice';
-    const description = element('label', 'Other (add your own) ');
+    const description = element('label', 'Other ');
+    const hint = element('span', '(add your own)'); hint.className = 'muted';
+    description.append(hint, document.createTextNode(' '));
     const input = element('input'); input.type = 'text'; input.maxLength = 200; input.value = custom.get(section.id)?.label || '';
     description.append(input);
     const details = element('div'); details.className = 'details'; details.hidden = !input.value.trim();

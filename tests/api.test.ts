@@ -21,7 +21,7 @@ async function login() {
   return response;
 }
 beforeEach(async () => {
-  const created = createApp({ databasePath: ':memory:', adminPassword: 'test-password', publicOrigin, adminOrigin, secureCookies: true });
+  const created = createApp({ databasePath: ':memory:', adminPassword: 'test-password', adminOrigin, secureCookies: true });
   db = created.db; cookie = '';
   server = created.app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
@@ -69,15 +69,17 @@ describe('public signup', () => {
     expect((await request('/claims', 'POST', { name: 'Alex', selections: [selection], custom: [{ sectionId: 'deleted', label: 'Pie' }] })).status).toBe(409);
     expect((await form()).sections[0].options[0].claimedBy).toBeNull();
   });
-  test('CORS permits Pages and preflights, rejects other origins, and disables caching', async () => {
+  test('CORS permits any public origin and preflights, and disables caching', async () => {
     const response = await request('/form');
-    expect(response.headers.get('access-control-allow-origin')).toBe(publicOrigin);
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(response.headers.get('access-control-allow-credentials')).toBeNull();
     expect(response.headers.get('cache-control')).toBe('no-store');
     const preflight = await fetch(`${base}/api/claims`, { method: 'OPTIONS', headers: { Origin: publicOrigin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
     expect(preflight.status).toBe(204); expect(preflight.headers.get('access-control-allow-headers')).toBe('Content-Type');
-    expect((await request('/form', 'GET', undefined, false, 'https://other.example')).status).toBe(403);
-    expect((await fetch(`${base}/api/claims`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(403);
+    expect((await request('/form', 'GET', undefined, false, 'https://other.example')).status).toBe(200);
+    const id = (await form()).sections[0].options[0].id;
+    expect((await request('/claims', 'POST', { name: 'Alex', selections: [{ optionId: id }] }, false, 'https://other.example')).status).toBe(201);
+    expect((await fetch(`${base}/api/claims`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status).toBe(400);
   });
 });
 
@@ -93,6 +95,10 @@ describe('admin', () => {
     expect((await request('/admin/title', 'PUT', { title: 'No' }, true, publicOrigin)).status).toBe(403);
     await request('/admin/logout', 'POST', {}, true);
     expect((await request('/admin/session', 'GET', undefined, true)).status).toBe(401);
+  });
+  test('accepts admin login from the actual host used to visit the portal', async () => {
+    const response = await request('/admin/login', 'POST', { password: 'test-password' }, true, base);
+    expect(response.status).toBe(200);
   });
   test('limits failed logins', async () => {
     for (let i = 0; i < 10; i++) expect((await request('/admin/login', 'POST', { password: 'bad' }, true)).status).toBe(401);

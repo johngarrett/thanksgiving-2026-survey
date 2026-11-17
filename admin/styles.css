@@ -10,8 +10,13 @@ fieldset { min-width: 0; margin: 1rem 0; padding: 1rem; }
 form { margin: .75rem 0; }
 .handle { touch-action: none; cursor: grab; }
 .dragging { outline: 2px dashed black; }
-#status { min-height: 1.5em; }
+#status:empty { display: none; }
 [hidden] { display: none !important; }
-:focus-visible { outline: 2px solid black; outline-offset: 3px; }
+:focus-visible { outline: 2px solid #a5bdcc; outline-offset: 2px; }
 a { overflow-wrap: anywhere; }
 h1, h2, h3, legend { font-family: Georgia, 'Times New Roman', serif; }
+#login { margin-top: 15vh; }
+#login input { display: block; width: 100%; font-size: clamp(2rem, 8vw, 4rem); padding: 1rem; }
+#login button { margin-top: 1rem; }
+input:not([type='checkbox']) { border: 1px solid #bbb; border-radius: 0; }
+.drag-preview { position: fixed; z-index: 10; pointer-events: none; background: white; border: 1px solid #aaa; padding: .5rem; max-width: 16rem; }

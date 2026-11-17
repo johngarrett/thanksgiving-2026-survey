@@ -8,7 +8,7 @@ legend { font-size: 1.4rem; font-weight: bold; padding: 0; }
 .details { margin: .5rem 0 .5rem 1.6rem; }
 .details label { display: block; margin: .5rem 0; }
 input[type='text'], input[type='url'], input:not([type]) { box-sizing: border-box; max-width: 100%; width: 24rem; padding: .3rem; }
-dialog { max-width: min(32rem, 85vw); }
+dialog { max-width: min(32rem, 85vw); border: 0; padding: 1.5rem; }
 dialog::backdrop { background: rgb(0 0 0 / 25%); }
 [hidden] { display: none !important; }
 a { overflow-wrap: anywhere; }
@@ -16,5 +16,7 @@ a { overflow-wrap: anywhere; }
 .custom-choice > label { display: block; }
 .custom-choice > label input { display: block; margin-top: .5rem; }
 .custom-choice .details { margin-left: 0; }
-:focus-visible { outline: 2px solid black; outline-offset: 3px; }
+:focus-visible { outline: 2px solid #a5bdcc; outline-offset: 2px; }
 h1, h2, h3, legend { font-family: Georgia, 'Times New Roman', serif; }
+input:not([type='checkbox']) { border: 1px solid #bbb; border-radius: 0; }
+.option.selected > label, .muted { color: #767676; }

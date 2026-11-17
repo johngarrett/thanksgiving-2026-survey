@@ -3,7 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { openDatabase, readForm } from './database';
 
-interface Config { databasePath: string; adminPassword: string; publicOrigin: string; adminOrigin: string; secureCookies: boolean }
+interface Config { databasePath: string; adminPassword: string; adminOrigin: string; secureCookies: boolean }
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 const fail = (status: number, message: string): never => { throw new HttpError(status, message); };
 function text(value: unknown, field: string, max = 200): string {
@@ -20,7 +20,7 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 
 export function createApp(config: Config) {
   if (!config.adminPassword) throw new Error('ADMIN_PASSWORD is required.');
-  for (const origin of [config.publicOrigin, config.adminOrigin]) {
+  for (const origin of [config.adminOrigin]) {
     if (new URL(origin).origin !== origin) throw new Error('Origins must include scheme and host, without a path or trailing slash.');
   }
   const db = openDatabase(config.databasePath);
@@ -30,21 +30,22 @@ export function createApp(config: Config) {
   app.disable('x-powered-by');
   const cookieName = config.secureCookies ? '__Host-thanksgiving_admin' : 'thanksgiving_admin';
   const cookieOptions = { httpOnly: true, secure: config.secureCookies, sameSite: 'strict' as const, path: '/' };
-  const allowedOrigins = new Set([config.publicOrigin, config.adminOrigin]);
   app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store');
-    res.vary('Origin');
     const origin = req.get('Origin');
-    if (origin && !allowedOrigins.has(origin)) return res.status(403).json({ error: 'Origin is not allowed.' });
-    if (origin && origin === config.publicOrigin) {
-      res.set('Access-Control-Allow-Origin', origin);
+    const adminRequest = req.path === '/admin' || req.path.startsWith('/admin/');
+    if (!adminRequest) {
+      res.set('Access-Control-Allow-Origin', '*');
       res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.set('Access-Control-Allow-Headers', 'Content-Type');
     }
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     if (!['GET', 'HEAD'].includes(req.method)) {
-      const adminRequest = req.path.startsWith('/admin');
-      if (!origin || (adminRequest && origin !== config.adminOrigin)) return res.status(403).json({ error: 'A valid request origin is required.' });
+      let sameOrigin = origin === config.adminOrigin;
+      if (origin) {
+        try { sameOrigin ||= new URL(origin).host === req.get('Host'); } catch {}
+      }
+      if (adminRequest && !sameOrigin) return res.status(403).json({ error: 'Admin changes must come from this site.' });
       if (!req.is('application/json')) return res.status(415).json({ error: 'Use application/json.' });
     }
     next();
@@ -186,7 +187,6 @@ if (import.meta.main) {
   const { app } = createApp({
     databasePath: process.env.DATABASE_PATH || 'data/thanksgiving.sqlite',
     adminPassword: process.env.ADMIN_PASSWORD || '',
-    publicOrigin: process.env.PUBLIC_ORIGIN || 'http://127.0.0.1:5173',
     adminOrigin: process.env.ADMIN_ORIGIN || 'http://127.0.0.1:5174',
     secureCookies: process.env.COOKIE_SECURE !== 'false',
   });

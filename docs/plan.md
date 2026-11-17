@@ -33,9 +33,9 @@ Store the editable page title in a single settings record. Renaming preserves ID
 
 - `GET /api/form`: title and ordered sections/options, with `claimedBy` as a name or null and `recipeUrl` as a URL or null.
 - `POST /api/claims`: name, selected option IDs with optional recipe URLs, and custom entries with section IDs and labels; validates input and atomically reserves all options, returning a conflict if any is unavailable.
-- Admin endpoints: title editing, section/option CRUD and ordering, claim assignment and clearing.
+- Admin endpoints: title editing, section/option CRUD and ordering, claim clearing.
 - Validate nonempty names and labels with bounded lengths. Render user content as text.
-- Keep live form responses uncached. Allow public API requests from the configured frontend origin and local development origin. CORS is not authentication.
+- Keep live form responses uncached. Allow public API requests from any origin without cookies; keep admin mutation origin checks. CORS is not authentication.
 - Seed both supplied sections and all ten options, including the kids-crafts note.
 
 ## Admin and deployment
@@ -43,6 +43,7 @@ Store the editable page title in a single settings record. Renaming preserves ID
 - Show sections, options, and claimant names with explicit Save buttons for edits.
 - Drag handles reorder sections and options within their section. Include keyboard-accessible move controls.
 - Confirm destructive deletions and identify affected claims.
+- Sign-in is just a large password box with a Password placeholder and a Sign in button; show editor headings after login.
 - One shared admin password in a server-only, Git-ignored `.env`; login, logout, rate limiting, and a seven-day secure HTTP-only session cookie.
 - Persist sessions in SQLite. Protect all admin API routes and validate origins for admin mutations. Never include credentials in the public build.
 - Docker Compose runs one app instance with persistent database storage. The existing tunnel forwards to its local port.

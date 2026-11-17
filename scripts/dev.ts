@@ -13,7 +13,7 @@ if (!process.env.ADMIN_PASSWORD) {
 }
 const publicUrl = `http://127.0.0.1:${publicPort}`;
 const adminUrl = `http://127.0.0.1:${adminPort}`;
-const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_PORT: String(publicPort), ADMIN_PORT: String(adminPort), PUBLIC_ORIGIN: publicUrl, ADMIN_ORIGIN: adminUrl, COOKIE_SECURE: 'false', VITE_API_URL: '', PUBLIC_BASE_PATH: '/', DEV_API_TARGET: `http://127.0.0.1:${port}` };
+const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_PORT: String(publicPort), ADMIN_PORT: String(adminPort), ADMIN_ORIGIN: adminUrl, COOKIE_SECURE: 'false', VITE_API_URL: '', PUBLIC_BASE_PATH: '/', DEV_API_TARGET: `http://127.0.0.1:${port}` };
 const children = [
   Bun.spawn([process.execPath, '--watch', 'server/index.ts'], { env, stdout: 'inherit', stderr: 'inherit' }),
   Bun.spawn([process.execPath, 'run', 'dev:public'], { env, stdout: 'inherit', stderr: 'inherit' }),

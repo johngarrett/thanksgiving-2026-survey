@@ -8,6 +8,9 @@ const content = document.querySelector<HTMLDivElement>('#content')!;
 let data: SignupForm;
 let dirty = false;
 let busy = false;
+class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) {
   const node = document.createElement(tag); if (text !== undefined) node.textContent = text; return node;
@@ -24,7 +27,7 @@ async function api(path: string, method = 'GET', body?: unknown) {
   const response = await fetch(`/api${path}`, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin', cache: 'no-store' });
   const result = await response.json();
   if (response.status === 401) { editor.hidden = true; login.hidden = false; }
-  if (!response.ok) throw new Error(result.error || 'Request failed.');
+  if (!response.ok) throw new ApiError(result.error || 'Request failed.', response.status);
   return result;
 }
 async function run(action: () => Promise<void>) {
@@ -69,9 +72,10 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
     handle.setPointerCapture(event.pointerId);
     let pointerY = event.clientY;
     let animation = 0;
+    const preview = element('div', label); preview.className = 'drag-preview'; preview.hidden = true; document.body.append(preview);
     const place = () => {
       const siblings = [...list.children].filter(node => node !== item) as HTMLElement[];
-      const target = siblings.find(node => pointerY < node.getBoundingClientRect().top + node.getBoundingClientRect().height / 2);
+      const target = siblings.find(node => pointerY < node.getBoundingClientRect().top + Math.min(node.getBoundingClientRect().height, 64) / 2);
       if (item.nextElementSibling !== (target || null)) {
         list.insertBefore(item, target || null);
         dirty = true; list.dataset.dirty = 'true';
@@ -88,11 +92,13 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
     const move = (e: PointerEvent) => {
       pointerY = e.clientY;
       if (Math.abs(pointerY - start) < 4 && !moved) return;
-      moved = true; item.classList.add('dragging'); place();
+      moved = true; item.classList.add('dragging');
+      preview.hidden = false; preview.style.left = `${e.clientX + 12}px`; preview.style.top = `${pointerY + 12}px`;
+      place();
     };
     const end = () => {
       cancelAnimationFrame(animation);
-      item.classList.remove('dragging');
+      item.classList.remove('dragging'); preview.remove();
       if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
       document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', end); document.removeEventListener('pointercancel', end);
     };
@@ -125,9 +131,6 @@ function optionRow(option: Option, list: HTMLElement) {
       if (hasOtherEdits() || !confirm(`Clear ${option.claimedBy}'s claim on “${option.label}”?`)) return;
       void run(async () => apply(await api(`/admin/options/${option.id}/claim`, 'DELETE', {})));
     }));
-  } else {
-    const name = field('Guest name', '', 'text', true, 100), url = field('Recipe URL (optional)', '', 'url', false, 2048);
-    row.append(editForm([name.node, url.node], 'Assign claim', `/admin/options/${option.id}/claim`, 'POST', () => ({ name: name.input.value, recipeUrl: url.input.value })));
   }
   row.append(button('Delete option', () => {
     if (hasOtherEdits() || !confirm(`Delete “${option.label}”${option.claimedBy !== null ? ` and ${option.claimedBy}'s claim` : ''}?`)) return;
@@ -181,5 +184,5 @@ window.addEventListener('beforeunload', event => {
 });
 void (async () => {
   try { await api('/admin/session'); await load(); status.textContent = 'Ready.'; }
-  catch (error) { login.hidden = false; status.textContent = error instanceof Error ? error.message : 'Unable to connect.'; }
+  catch (error) { login.hidden = false; status.textContent = error instanceof ApiError && error.status === 401 ? '' : error instanceof Error ? error.message : 'Unable to connect.'; }
 })();

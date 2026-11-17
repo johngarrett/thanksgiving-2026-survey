@@ -10,9 +10,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     proxy: { '/api': {
       target: process.env.DEV_API_TARGET || `http://127.0.0.1:${process.env.PORT || 3000}`,
-      headers: { Origin: mode === 'admin'
-        ? (process.env.ADMIN_ORIGIN || `http://127.0.0.1:${process.env.ADMIN_PORT || 5174}`)
-        : (process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${process.env.PUBLIC_PORT || 5173}`) },
+      changeOrigin: false,
     } },
   },
 }));

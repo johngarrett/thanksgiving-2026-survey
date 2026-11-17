@@ -29,7 +29,7 @@ Guests may select multiple options and type one custom choice per section. Custo
 
 Submit opens the name modal. Every selected and custom option saves in one SQLite transaction. If anything is unavailable, the entire save fails and the form refreshes while retaining the guest's name and remaining valid choices. The database's unique claim constraint prevents double bookings. Availability refreshes on load, tab return, and successful save. It is not continuously updated.
 
-Only admins can clear or assign claims. Clearing a custom entry's claim leaves that option available for someone else. Delete the option to remove it entirely. Names and recipe links are public.
+Only admins can clear claims. Clearing a custom entry's claim leaves that option available for someone else. Delete the option to remove it entirely. Names and recipe links are public.
 
 If a connection drops during saving, the request may already have succeeded. Reload and check your claims before trying again, particularly custom entries.
 
@@ -37,7 +37,7 @@ If a connection drops during saving, the request may already have succeeded. Rel
 
 Sign in with `ADMIN_PASSWORD` from the server's `.env`; no username is needed. The server stores hashed random session tokens in SQLite. Sessions last seven days. Changing `ADMIN_PASSWORD` and restarting invalidates existing logins.
 
-The admin editor supports page/section/option text, adding/removing sections and options, assigning/clearing claims, and pointer or keyboard reordering. Drag the handle or use Move up/down, then **Save order**. Options move within their section. Text edits have separate Save buttons. Destructive actions show confirmations including affected claims.
+The admin editor supports page/section/option text, adding/removing sections and options, clearing claims, and pointer or keyboard reordering. Drag the handle or use Move up/down, then **Save order**. Options move within their section. Text edits have separate Save buttons. Destructive actions show confirmations including affected claims.
 
 ## Server deployment
 
@@ -45,12 +45,11 @@ Set these values in the server's `.env`:
 
 ```dotenv
 ADMIN_PASSWORD=your-own-password
-PUBLIC_ORIGIN=https://garrepi.github.io
 ADMIN_ORIGIN=https://garrepi.dev
 PORT=3000
 ```
 
-Origins have a scheme and host, without a path or trailing slash. `PUBLIC_ORIGIN` does not contain the GitHub repository path.
+The admin origin has a scheme and host, without a path or trailing slash. Public API CORS allows any origin without cookies. Admin changes require a logged-in session and the configured admin origin or the actual host serving the portal.
 
 ```sh
 docker compose up -d --build

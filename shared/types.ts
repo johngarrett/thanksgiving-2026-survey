@@ -4,7 +4,7 @@ export interface Option {
   claimedBy: string | null;
   notes: string | null;
 }
-export interface Section { id: string; title: string; options: Option[] }
+export interface Section { id: string; title: string; customPlaceholder: string; options: Option[] }
 export interface SignupForm { title: string; sections: Section[] }
 export interface ClaimInput {
   name: string;

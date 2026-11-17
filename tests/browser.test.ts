@@ -156,7 +156,7 @@ test('mobile form fits the viewport and shows custom task inputs', async ({ page
   expect(alerts).toHaveLength(0);
   await tasks.getByRole('checkbox', { name: 'Other', exact: true }).check();
   await expect(tasks.getByLabel('Notes').last()).toHaveAttribute('placeholder', 'Notes');
-  await expect(tasks.getByLabel('Other description')).toHaveAttribute('placeholder', 'What will you do?');
+  await expect(tasks.getByLabel('Other description')).toHaveAttribute('placeholder', 'What will u do?');
   await tasks.getByLabel('Other description').fill('Walk the dog');
   const notes = tasks.getByLabel('Notes').last();
   const shortHeight = (await notes.boundingBox())!.height;

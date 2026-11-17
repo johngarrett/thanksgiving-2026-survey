@@ -111,7 +111,7 @@ export function createApp(config: Config) {
     res.json(readForm(db));
   });
   app.post('/api/admin/sections', (req, res) => {
-    db.query('INSERT INTO sections VALUES (?, ?, (SELECT COALESCE(MAX(display_order), -1) + 1 FROM sections))').run(crypto.randomUUID(), text(req.body?.title, 'Section title'));
+    db.query('INSERT INTO sections (id, title, display_order) VALUES (?, ?, (SELECT COALESCE(MAX(display_order), -1) + 1 FROM sections))').run(crypto.randomUUID(), text(req.body?.title, 'Section title'));
     res.status(201).json(readForm(db));
   });
   app.put('/api/admin/sections/:id', (req, res) => {

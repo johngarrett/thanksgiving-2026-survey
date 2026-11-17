@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../server/index';
+import { Database } from 'bun:sqlite';
 import { openDatabase, readForm } from '../server/database';
 import type { SignupForm } from '../shared/types';
 
@@ -147,6 +148,24 @@ test('database data and sessions survive reopening without reseeding', () => {
     expect(readForm(disk).sections[0].options[0].claimedBy).toBe('Alex');
     expect(readForm(disk).sections).toHaveLength(2);
     expect(disk.query('SELECT token_hash FROM sessions').all()).toHaveLength(1);
+    disk.close();
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('section prompts survive migration, renaming, and reordering by ID', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'thanksgiving-'));
+  try {
+    const path = join(folder, 'test.sqlite');
+    const legacy = new Database(path);
+    legacy.exec(`CREATE TABLE sections (id TEXT PRIMARY KEY, title TEXT NOT NULL, display_order INTEGER NOT NULL);
+      INSERT INTO sections VALUES ('food', 'Food', 0), ('tasks', 'Helping out', 1);`);
+    legacy.close();
+    let disk = openDatabase(path);
+    disk.query('UPDATE sections SET title = ?, display_order = ? WHERE id = ?').run('Anything', -1, 'tasks');
+    disk.close();
+    disk = openDatabase(path);
+    expect(readForm(disk).sections.find(section => section.id === 'tasks')?.customPlaceholder).toBe('What will u do?');
+    expect(readForm(disk).sections.find(section => section.id === 'food')?.customPlaceholder).toBe('What will u cook?');
     disk.close();
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });

@@ -77,7 +77,7 @@ function render(form: SignupForm) {
     description.append(check, document.createTextNode(' Other'));
     const input = element('input'); input.type = 'text'; input.maxLength = 200; input.value = custom.get(section.id)?.label || '';
     input.setAttribute('aria-label', 'Other description');
-    input.placeholder = /\bdo\b/i.test(section.title) ? 'What will you do?' : 'What will u cook?';
+    input.placeholder = section.customPlaceholder;
     input.hidden = !check.checked;
     const details = element('div'); details.className = 'details'; details.hidden = !check.checked;
     details.append(notesInput(custom.get(section.id)?.notes || '', value => {

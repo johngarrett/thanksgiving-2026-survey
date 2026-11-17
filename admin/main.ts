@@ -76,6 +76,8 @@ async function run(action: () => Promise<void>) {
   if (busy) return;
   busy = true;
   const focused = document.activeElement as HTMLElement | null;
+  const item = focused?.closest<HTMLElement>('[data-item]')?.dataset.item;
+  const pageTitle = focused?.closest('.page-title');
   content.inert = true;
   login.inert = true;
   status.textContent = '';
@@ -85,7 +87,11 @@ async function run(action: () => Promise<void>) {
     (target || editor.querySelector('header')!).append(status);
     status.textContent = error instanceof Error ? error.message : 'Connection failed. Refresh to check whether the change saved.';
   }
-  finally { busy = false; content.inert = false; login.inert = false; if (focused?.isConnected) focused.focus(); }
+  finally {
+    busy = false; content.inert = false; login.inert = false;
+    const target = focused?.isConnected ? focused : item ? content.querySelector(`[data-item="${CSS.escape(item)}"] .pencil`) : pageTitle ? content.querySelector('.page-title .pencil') : null;
+    (target as HTMLElement | null)?.focus();
+  }
 }
 function form(fields: HTMLElement[], submitText: string, save: () => Promise<void>) {
   const node = element('form'); const submit = element('button', submitText); submit.type = 'submit';
@@ -94,14 +100,7 @@ function form(fields: HTMLElement[], submitText: string, save: () => Promise<voi
   node.addEventListener('invalid', event => { node.append(status); status.textContent = (event.target as HTMLInputElement).validationMessage; }, true);
   return node;
 }
-function apply(result: SignupForm) {
-  const focused = document.activeElement as HTMLElement | null;
-  const item = focused?.closest<HTMLElement>('[data-item]')?.dataset.item;
-  const pageTitle = focused?.closest('.page-title');
-  data = result; dirty = false; render();
-  const target = item ? content.querySelector(`[data-item="${CSS.escape(item)}"] .pencil`) : pageTitle ? content.querySelector('.page-title .pencil') : null;
-  (target as HTMLElement | null)?.focus();
-}
+function apply(result: SignupForm) { data = result; dirty = false; render(); }
 function hasOtherEdits(currentForm?: HTMLFormElement): boolean {
   const others = [...content.querySelectorAll<HTMLFormElement>('form')].some(node => node !== currentForm && [...node.querySelectorAll<HTMLInputElement>('input')].some(input => input.value !== input.defaultValue));
   return (others || dirty) && !confirm('This will refresh the editor and discard other unsaved text edits or ordering. Continue?');

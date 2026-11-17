@@ -37,7 +37,6 @@ function notesInput(value: string, onInput: (value: string) => void) {
 }
 function render(form: SignupForm) {
   document.querySelector('#title')!.textContent = form.title;
-  document.title = form.title;
   sections.replaceChildren();
   const available = new Set(form.sections.flatMap(section => section.options.filter(option => option.claimedBy === null).map(option => option.id)));
   for (const id of chosen.keys()) if (!available.has(id)) chosen.delete(id);

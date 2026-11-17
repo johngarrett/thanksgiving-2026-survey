@@ -52,8 +52,10 @@ PORT=3000
 The admin origin has a scheme and host, without a path or trailing slash. Public API CORS allows any origin without cookies. Admin changes require a logged-in session and the configured admin origin or the actual host serving the portal.
 
 ```sh
-docker compose up -d --build
+./scripts/deploy
 ```
+
+`./scripts/deploy` builds the server image, starts it in the background, and waits for its health check. It uses the project’s `.env` and preserves the existing data volume.
 
 The server binds only to host loopback at `PORT`, with SQLite stored in the `thanksgiving-data` named volume. Point the existing Cloudflare Tunnel at `http://localhost:3000` (or your chosen host port). If `cloudflared` is itself in Docker, connect it to the Compose network and use `http://thanksgiving:3000` instead.
 

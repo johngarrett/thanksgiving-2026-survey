@@ -8,15 +8,40 @@ legend { font-size: 1.4rem; font-weight: bold; padding: 0; }
 .details { margin: .5rem 0 .5rem 1.6rem; }
 .details label { display: block; margin: .5rem 0; }
 input[type='text'], input[type='url'], input:not([type]) { box-sizing: border-box; max-width: 100%; width: 24rem; padding: .3rem; }
-dialog { max-width: min(32rem, 85vw); border: 0; padding: 1.5rem; }
-dialog::backdrop { background: rgb(0 0 0 / 25%); }
+dialog { box-sizing: border-box; width: min(38rem, calc(100vw - 2rem)); max-width: none; border: 0; padding: 3.5rem 2rem 2rem; }
+dialog::backdrop { background: rgb(0 0 0 / 55%); }
 [hidden] { display: none !important; }
 a { overflow-wrap: anywhere; }
 #status:empty, #save-status:empty { display: none; }
 .custom-choice > label { display: block; }
-.custom-choice > label input { display: block; margin-top: .5rem; }
-.custom-choice .details { margin-left: 0; }
+.custom-choice > input { display: block; margin: .5rem 0 0 1.6rem; width: min(24rem, calc(100% - 1.6rem)); }
+.custom-choice .details { margin-left: 1.6rem; }
 :focus-visible { outline: 2px solid #a5bdcc; outline-offset: 2px; }
 h1, h2, h3, legend { font-family: Georgia, 'Times New Roman', serif; }
 input:not([type='checkbox']) { border: 1px solid #bbb; border-radius: 0; }
-.option.selected > label, .muted { color: #767676; }
+.option.claimed > label, .muted { color: #767676; }
+
+.notes { display: block; }
+
+.option.claimed > .claim, .option.claimed > .notes { color: #767676; }
+
+
+
+#status.selection-error { color: #c22; }
+
+#submit, #save { font-family: Helvetica, Arial, sans-serif; font-weight: bold; border: 0; background: none; padding: .5rem 0; }
+#status { margin: 1rem 0 .25rem; }
+#save-form { margin: 0; }
+#cancel { position: absolute; top: .75rem; right: .75rem; background: none; border: 0; padding: .25rem; }
+#cancel svg { display: block; width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.5; }
+#cancel:hover svg { stroke-width: 3; }
+.name-field { display: flex; flex-direction: column; gap: .4rem; }
+#guest-name { width: 100%; border: 0; border-bottom: 1px solid black; padding: .5rem 0; font-size: 1.5rem; outline: none; }
+.name-field span { font-size: 1.1rem; }
+#save { display: block; margin: 2rem auto 0; font-size: 1.25rem; }
+#save-status { color: #c22; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+input:not([type='checkbox']):focus { outline: none; box-shadow: none; }
+
+input::placeholder { color: #767676; opacity: 1; }

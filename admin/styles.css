@@ -1,22 +1,88 @@
-body { font-family: Helvetica, Arial, sans-serif; color: black; background: white; max-width: 58rem; margin: 2rem auto; padding: 0 1rem; }
+body { font-family: Helvetica, Arial, sans-serif; color: black; background: white; margin: 2.5rem auto; padding: 0 2.5rem; max-width: 74rem; font-size: 1rem; }
 button, input { font: inherit; }
-button { cursor: pointer; margin: .25rem .25rem .25rem 0; }
+button { cursor: pointer; background: none; border: 0; padding: .35rem .5rem; color: inherit; }
 button:disabled { cursor: default; }
 input { max-width: 100%; box-sizing: border-box; padding: .25rem; }
-input[type='text'], input[type='url'] { width: 23rem; }
+input[type='text'] { width: 23rem; }
 label { display: block; margin: .4rem 0; }
-fieldset { min-width: 0; margin: 1rem 0; padding: 1rem; }
-.option { border-top: 1px solid #aaa; padding: 1rem 0; }
 form { margin: .75rem 0; }
-.handle { touch-action: none; cursor: grab; }
-.dragging { outline: 2px dashed black; }
+header { border-bottom: 1px solid #ddd; padding-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
+header h1 { font-family: Helvetica, Arial, sans-serif; font-weight: bold; margin: 0; font-size: 2rem; }
+nav { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+h1, h2 { font-family: Georgia, 'Times New Roman', serif; }
+h2 { font-size: 1.4rem; margin: 0; }
+.section { position: relative; margin: 0 0 2rem; }
+.inline-editor { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.visible-label { overflow-wrap: anywhere; }
+
+.inline-editor svg, .handle svg { width: 1.5rem; height: 1.5rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.option { position: relative; padding: .45rem 0 .45rem 2.5rem; min-height: 1.5rem; }
+.option .reorder-controls { position: absolute; top: .45rem; left: 0; }
+.section > .reorder-controls { position: absolute; left: -2.25rem; top: .25rem; }
+.handle { touch-action: none; cursor: grab; color: #ccc; }
+.handle:focus-visible, .handle:hover { color: #666; }
+.dragging { outline: 2px dashed #aaa; }
+.claimed .visible-label, .claimed > .claim, .claimed > .notes { color: #767676; }
+.option > .claim, .option > .notes { margin: .5rem 0 0 .5rem; }
+.option .claim { order: 2; }
+.option { display: flex; flex-direction: column; }
+.option > .notes { order: 3; }
+.inline-form { margin: 0; color: black; }
+.inline-form label { font-size: .85rem; }
+.add-control { margin-top: 1rem; }
+#content > .add-control { margin-top: 2rem; }
+.page-title { margin-bottom: 2rem; }
+.page-title h2 { font-size: 2rem; }
+button:has(+ .add-control), .section > button { font-size: 1rem; color: #666; }
+[data-list]:not([data-dirty]) + button { display: none; }
+#status { font-size: 1rem; }
 #status:empty { display: none; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid #a5bdcc; outline-offset: 2px; }
 a { overflow-wrap: anywhere; }
-h1, h2, h3, legend { font-family: Georgia, 'Times New Roman', serif; }
 #login { margin-top: 15vh; }
 #login input { display: block; width: 100%; font-size: clamp(2rem, 8vw, 4rem); padding: 1rem; }
 #login button { margin-top: 1rem; }
 input:not([type='checkbox']) { border: 1px solid #bbb; border-radius: 0; }
 .drag-preview { position: fixed; z-index: 10; pointer-events: none; background: white; border: 1px solid #aaa; padding: .5rem; max-width: 16rem; }
+@media (max-width: 600px) {
+  body { padding: 0 1.25rem; font-size: 1rem; margin-top: 1.5rem; }
+  header { align-items: flex-start; margin-bottom: 3rem; }
+  header h1 { font-size: 2rem; }
+  h2 { font-size: 1.5rem; }
+  .section > .reorder-controls { position: static; }
+  .visible-label, .section > .inline-editor .visible-label { width: auto; }
+  .option { padding-left: 2.5rem; }
+  .option .reorder-controls { left: 0; }
+  .inline-editor { gap: .5rem; }
+  .inline-form { min-width: 0; }
+}
+
+.pencil { color: #aaa; flex-shrink: 0; }
+.pencil:hover { color: black; }
+.pencil svg { fill: currentColor; stroke: none; width: 1.1rem; height: 1.1rem; }
+.inline-form { width: min(100%, 36rem); }
+.inline-form label { margin: 0 0 .25rem; }
+.inline-form input[type='text'] { width: 100%; font-size: 1.25rem; padding: .4rem; }
+.inline-form input:focus { outline: none; }
+.edit-actions { display: flex; align-items: center; gap: .25rem; }
+.edit-actions button { padding: .25rem .35rem; }
+.edit-actions button:first-child { padding-left: 0; }
+.cancel { color: #888; }
+.cancel:hover { color: black; }
+.delete { color: #c22; margin-left: auto; }
+
+.add-control label input { display: block; margin-top: .35rem; width: 36rem; max-width: 100%; font-size: 1.25rem; padding: .4rem; }
+.add-control input:focus { outline: none; }
+
+.pencil, .handle { opacity: 0; }
+.inline-editor:hover > .pencil, .inline-editor:focus-within > .pencil,
+.option:hover > .inline-editor > .pencil,
+.option:hover > .reorder-controls > .handle,
+.section:has(> .inline-editor:hover) > .reorder-controls > .handle,
+.reorder-controls:hover > .handle,
+.pencil:focus-visible, .handle:focus-visible { opacity: 1; }
+
+
+
+input:not([type='checkbox']):focus { outline: none; box-shadow: none; }

@@ -29,12 +29,13 @@ export function openDatabase(path: string) {
   return db;
 }
 
+// Keep the existing recipe_url column so saved notes survive the field rename.
 export function readForm(db: Database): SignupForm {
   return db.transaction(() => ({
     title: (db.query('SELECT title FROM settings WHERE id = 1').get() as { title: string }).title,
     sections: (db.query('SELECT id, title FROM sections ORDER BY display_order, id').all() as { id: string; title: string }[]).map(section => ({
       ...section,
-      options: db.query(`SELECT o.id, o.label, c.guest_name AS claimedBy, c.recipe_url AS recipeUrl
+      options: db.query(`SELECT o.id, o.label, c.guest_name AS claimedBy, c.recipe_url AS notes
         FROM options o LEFT JOIN claims c ON c.option_id = o.id
         WHERE o.section_id = ? ORDER BY o.display_order, o.id`).all(section.id) as Option[],
     })),

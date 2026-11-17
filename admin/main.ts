@@ -23,6 +23,47 @@ function field(label: string, value = '', type = 'text', required = true, max = 
   input.type = type; input.value = value; input.required = required; input.maxLength = max;
   node.append(input); return { node, input };
 }
+function iconButton(kind: 'pencil' | 'handle', label: string, click: () => void) {
+  const node = button('', click);
+  node.setAttribute('aria-label', label);
+  node.title = label;
+  node.className = kind;
+  node.innerHTML = kind === 'pencil'
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.5V21h3.5L18 9.5 14.5 6ZM20.7 6.8a1 1 0 0 0 0-1.4l-2.1-2.1a1 1 0 0 0-1.4 0L15.6 5 19 8.4Z"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>';
+  return node;
+}
+function inlineEditor(value: string, label: string, saveText: string, path: string, key: string, heading: boolean, actions: HTMLElement[] = []) {
+  const node = element('div'); node.className = 'inline-editor';
+  const display = element(heading ? 'h2' : 'span', value); display.className = 'visible-label';
+  const input = field(label, value);
+  input.node.firstChild?.remove();
+  input.input.setAttribute('aria-label', label);
+  const edit = editForm([input.node], saveText, path, 'PUT', () => ({ [key]: input.input.value }));
+  edit.className = 'inline-form'; edit.hidden = true;
+  const pencil = iconButton('pencil', `Edit ${value}`, () => {
+    display.hidden = true; pencil.hidden = true; edit.hidden = false; input.input.focus(); input.input.select();
+  });
+  const cancel = () => {
+    input.input.value = value; edit.hidden = true; display.hidden = false; pencil.hidden = false; pencil.focus();
+  };
+  const controls = element('div'); controls.className = 'edit-actions';
+  const cancelButton = button('Cancel', cancel); cancelButton.className = 'cancel';
+  controls.append(edit.querySelector('button')!, cancelButton, ...actions);
+  edit.append(controls);
+  edit.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); cancel(); } });
+  for (const action of actions) if (action.textContent === 'Delete') action.className = 'delete';
+  node.append(display, pencil, edit);
+  return node;
+}
+function addForm(fields: HTMLElement[], text: string, path: string, body: () => unknown) {
+  const node = element('div'); node.className = 'add-control';
+  const edit = editForm(fields, text, path, 'POST', body); edit.hidden = true;
+  const add = button(`+ ${text}`, () => { add.hidden = true; edit.hidden = false; edit.querySelector('input')?.focus(); });
+  const cancel = button('Cancel', () => { edit.reset(); edit.hidden = true; add.hidden = false; add.focus(); });
+  cancel.className = 'cancel'; edit.append(cancel);
+  node.append(add, edit); return node;
+}
 async function api(path: string, method = 'GET', body?: unknown) {
   const response = await fetch(`/api${path}`, { method, headers: body === undefined ? undefined : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin', cache: 'no-store' });
   const result = await response.json();
@@ -36,8 +77,8 @@ async function run(action: () => Promise<void>) {
   const focused = document.activeElement as HTMLElement | null;
   content.inert = true;
   login.inert = true;
-  status.textContent = 'Saving…';
-  try { await action(); status.textContent = 'Saved.'; }
+  status.textContent = '';
+  try { await action(); status.textContent = ''; }
   catch (error) { status.textContent = error instanceof Error ? error.message : 'Connection failed. Refresh to check whether the change saved.'; }
   finally { busy = false; content.inert = false; login.inert = false; if (focused?.isConnected) focused.focus(); }
 }
@@ -61,8 +102,8 @@ function editForm(fields: HTMLElement[], submitText: string, path: string, metho
   return node;
 }
 function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
-  const controls = element('div');
-  const handle = button(`↕ Drag ${label}`, () => {}); handle.className = 'handle';
+  const controls = element('div'); controls.className = 'reorder-controls';
+  const handle = iconButton('handle', `Drag to reorder ${label}`, () => {}); handle.className = 'handle';
   handle.setAttribute('aria-label', `Drag to reorder ${label}; use the adjacent move buttons for keyboard reordering`);
   handle.addEventListener('pointerdown', event => {
     if (busy || event.button !== 0) return;
@@ -79,7 +120,7 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
       if (item.nextElementSibling !== (target || null)) {
         list.insertBefore(item, target || null);
         dirty = true; list.dataset.dirty = 'true';
-        status.textContent = 'Order changed. Choose Save order to keep it.';
+        status.textContent = '';
       }
     };
     const scroll = () => {
@@ -105,11 +146,16 @@ function reorderControls(item: HTMLElement, list: HTMLElement, label: string) {
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
     animation = requestAnimationFrame(scroll);
   });
-  controls.append(handle, button('Move up', () => {
-    if (item.previousElementSibling) { list.insertBefore(item, item.previousElementSibling); dirty = true; list.dataset.dirty = 'true'; status.textContent = `${label} moved up. Save order to keep it.`; }
-  }), button('Move down', () => {
-    if (item.nextElementSibling) { list.insertBefore(item.nextElementSibling, item); dirty = true; list.dataset.dirty = 'true'; status.textContent = `${label} moved down. Save order to keep it.`; }
-  }));
+  handle.setAttribute('aria-label', `Drag to reorder ${label}; use Arrow Up or Arrow Down to move`);
+  handle.addEventListener('keydown', event => {
+    if (busy || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'ArrowUp' && item.previousElementSibling) list.insertBefore(item, item.previousElementSibling);
+    else if (event.key === 'ArrowDown' && item.nextElementSibling) list.insertBefore(item.nextElementSibling, item);
+    else return;
+    dirty = true; list.dataset.dirty = 'true'; status.textContent = ''; handle.focus();
+  });
+  controls.append(handle);
   return controls;
 }
 function orderSave(list: HTMLElement, sectionId?: string) {
@@ -122,48 +168,51 @@ function orderSave(list: HTMLElement, sectionId?: string) {
 function optionRow(option: Option, list: HTMLElement) {
   const row = element('div'); row.className = 'option'; row.dataset.item = option.id;
   row.append(reorderControls(row, list, option.label));
-  const label = field('Option label', option.label);
-  row.append(editForm([label.node], 'Save option', `/admin/options/${option.id}`, 'PUT', () => ({ label: label.input.value })));
-  row.append(element('p', option.claimedBy === null ? 'Available' : `Claimed by ${option.claimedBy}`));
-  if (option.recipeUrl) { const link = element('a', 'Recipe'); link.href = option.recipeUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link); }
+  const actions: HTMLElement[] = [];
   if (option.claimedBy !== null) {
-    row.append(button('Clear claim', () => {
+    row.classList.add('claimed');
+    const claim = element('p', '↳ Claimed by '); claim.className = 'claim';
+    claim.append(element('strong', option.claimedBy)); row.append(claim);
+  }
+  if (option.notes) { const note = element('p', `↳ ${option.notes}`); note.className = 'notes'; row.append(note); }
+  if (option.claimedBy !== null) {
+    actions.push(button('Clear claim', () => {
       if (hasOtherEdits() || !confirm(`Clear ${option.claimedBy}'s claim on “${option.label}”?`)) return;
       void run(async () => apply(await api(`/admin/options/${option.id}/claim`, 'DELETE', {})));
     }));
   }
-  row.append(button('Delete option', () => {
+  actions.push(button('Delete', () => {
     if (hasOtherEdits() || !confirm(`Delete “${option.label}”${option.claimedBy !== null ? ` and ${option.claimedBy}'s claim` : ''}?`)) return;
     void run(async () => apply(await api(`/admin/options/${option.id}`, 'DELETE', {})));
   }));
+  row.append(inlineEditor(option.label, 'Option label', 'Save', `/admin/options/${option.id}`, 'label', false, actions));
   return row;
 }
 function sectionRow(section: Section, list: HTMLElement) {
-  const row = element('fieldset'); row.dataset.item = section.id; row.append(element('legend', section.title));
+  const row = element('section'); row.className = 'section'; row.dataset.item = section.id; row.setAttribute('role', 'group'); row.setAttribute('aria-label', section.title);
   row.append(reorderControls(row, list, section.title));
-  const title = field('Section title', section.title);
-  row.append(editForm([title.node], 'Save section', `/admin/sections/${section.id}`, 'PUT', () => ({ title: title.input.value })));
-  row.append(button('Delete section', () => {
+  const remove = button('Delete', () => {
     const claims = section.options.filter(option => option.claimedBy !== null).map(option => `${option.label}: ${option.claimedBy}`);
     if (hasOtherEdits() || !confirm(`Delete “${section.title}” and all ${section.options.length} options?${claims.length ? `\nClaims to delete:\n${claims.join('\n')}` : ''}`)) return;
     void run(async () => apply(await api(`/admin/sections/${section.id}`, 'DELETE', {})));
-  }));
+  });
+  row.append(inlineEditor(section.title, 'Section title', 'Save', `/admin/sections/${section.id}`, 'title', true, [remove]));
   const options = element('div'); options.dataset.list = section.id;
   section.options.forEach(option => options.append(optionRow(option, options)));
   row.append(options, orderSave(options, section.id));
   const label = field('New option');
-  row.append(editForm([label.node], 'Add option', `/admin/sections/${section.id}/options`, 'POST', () => ({ label: label.input.value })));
+  row.append(addForm([label.node], 'Add option', `/admin/sections/${section.id}/options`, () => ({ label: label.input.value })));
   return row;
 }
 function render() {
   content.replaceChildren();
-  const title = field('Page title', data.title);
-  content.append(editForm([title.node], 'Save title', '/admin/title', 'PUT', () => ({ title: title.input.value })));
+  const title = inlineEditor(data.title, 'Page title', 'Save', '/admin/title', 'title', true);
+  title.classList.add('page-title'); content.append(title);
   const list = element('div'); list.dataset.list = 'sections';
   data.sections.forEach(section => list.append(sectionRow(section, list)));
   content.append(list, orderSave(list));
-  const newTitle = field('New section title');
-  content.append(editForm([newTitle.node], 'Add section', '/admin/sections', 'POST', () => ({ title: newTitle.input.value })));
+  const newTitle = field('Title');
+  content.append(addForm([newTitle.node], 'Add section', '/admin/sections', () => ({ title: newTitle.input.value })));
 }
 async function load() {
   apply(await api('/form')); login.hidden = true; editor.hidden = false;
@@ -172,9 +221,6 @@ login.addEventListener('submit', event => {
   event.preventDefault();
   void run(async () => { await api('/admin/login', 'POST', { password: new FormData(login).get('password') }); login.reset(); await load(); });
 });
-document.querySelector('#logout')!.addEventListener('click', () => void run(async () => {
-  await api('/admin/logout', 'POST', {}); content.replaceChildren(); login.hidden = false; editor.hidden = true;
-}));
 document.querySelector('#refresh')!.addEventListener('click', () => {
   if (hasOtherEdits()) return;
   void run(load);
@@ -183,6 +229,6 @@ window.addEventListener('beforeunload', event => {
   if (dirty || [...content.querySelectorAll<HTMLInputElement>('input')].some(input => input.value !== input.defaultValue)) event.preventDefault();
 });
 void (async () => {
-  try { await api('/admin/session'); await load(); status.textContent = 'Ready.'; }
+  try { await api('/admin/session'); await load(); status.textContent = ''; }
   catch (error) { login.hidden = false; status.textContent = error instanceof ApiError && error.status === 401 ? '' : error instanceof Error ? error.message : 'Unable to connect.'; }
 })();

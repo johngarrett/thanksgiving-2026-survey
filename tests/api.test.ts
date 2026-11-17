@@ -30,10 +30,10 @@ beforeEach(async () => {
 afterEach(async () => { await new Promise<void>(resolve => server.close(() => resolve())); db.close(); });
 
 describe('public signup', () => {
-  test('seeds both sections and ten options; JSON includes optional recipe URLs', async () => {
+  test('seeds both sections and ten options; JSON includes optional notes', async () => {
     const data = await form(); expect(data.sections).toHaveLength(2);
     expect(data.sections.flatMap(s => s.options)).toHaveLength(10);
-    expect(data.sections[0].options[0].recipeUrl).toBeNull();
+    expect(data.sections[0].options[0].notes).toBeNull();
   });
   test('only one concurrent claim wins', async () => {
     const id = (await form()).sections[0].options[0].id;
@@ -49,21 +49,21 @@ describe('public signup', () => {
     const updated = (await form()).sections[0];
     expect(updated.options).toHaveLength(5); expect(updated.options[1].claimedBy).toBeNull();
   });
-  test('custom entries and recipes become public together', async () => {
+  test('custom entries and notes become public together', async () => {
     const section = (await form()).sections[0];
-    const response = await request('/claims', 'POST', { name: ' Alex ', selections: [{ optionId: section.options[0].id, recipeUrl: 'https://example.com/mac' }], custom: [{ sectionId: section.id, label: ' Pumpkin pie ', recipeUrl: 'https://example.com/pie' }] });
+    const response = await request('/claims', 'POST', { name: ' Alex ', selections: [{ optionId: section.options[0].id, notes: 'No nuts, please' }], custom: [{ sectionId: section.id, label: ' Pumpkin pie ', notes: 'https://example.com/pie' }] });
     expect(response.status).toBe(201);
     const updated = (await form()).sections[0];
-    expect(updated.options[0].recipeUrl).toBe('https://example.com/mac');
-    expect(updated.options.at(-1)).toMatchObject({ label: 'Pumpkin pie', claimedBy: 'Alex', recipeUrl: 'https://example.com/pie' });
+    expect(updated.options[0].notes).toBe('No nuts, please');
+    expect(updated.options.at(-1)).toMatchObject({ label: 'Pumpkin pie', claimedBy: 'Alex', notes: 'https://example.com/pie' });
   });
-  test('validates name, selections, duplicates, URLs and deleted sections', async () => {
+  test('validates name, selections, duplicates, notes and deleted sections', async () => {
     const section = (await form()).sections[0], selection = { optionId: section.options[0].id };
     for (const body of [
       { name: ' ', selections: [selection] },
       { name: 'Alex', selections: [] },
       { name: 'Alex', selections: [selection, selection] },
-      { name: 'Alex', selections: [{ ...selection, recipeUrl: 'javascript:alert(1)' }] },
+      { name: 'Alex', selections: [{ ...selection, notes: 42 }] },
       { name: 'Alex', selections: [null] },
     ]) expect((await request('/claims', 'POST', body)).status).toBe(400);
     expect((await request('/claims', 'POST', { name: 'Alex', selections: [selection], custom: [{ sectionId: 'deleted', label: 'Pie' }] })).status).toBe(409);
@@ -111,7 +111,7 @@ describe('admin', () => {
     let data = await form(); const dessert = data.sections.at(-1)!;
     await request(`/admin/sections/${dessert.id}/options`, 'POST', { label: 'Pie' }, true);
     data = await form(); const pie = data.sections.at(-1)!.options[0];
-    await request(`/admin/options/${pie.id}/claim`, 'POST', { name: 'Alex', recipeUrl: 'https://example.com' }, true);
+    await request(`/admin/options/${pie.id}/claim`, 'POST', { name: 'Alex', notes: 'https://example.com' }, true);
     expect((await request(`/admin/options/${pie.id}/claim`, 'POST', { name: 'Jordan' }, true)).status).toBe(409);
     await request(`/admin/options/${pie.id}`, 'PUT', { label: 'Apple pie' }, true);
     expect((await form()).sections.at(-1)!.options[0]).toMatchObject({ label: 'Apple pie', claimedBy: 'Alex' });

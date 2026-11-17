@@ -10,11 +10,10 @@ function text(value: unknown, field: string, max = 200): string {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > max) return fail(400, `${field} must contain 1–${max} characters.`);
   return value.trim();
 }
-function recipe(value: unknown): string | null {
+function notes(value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null;
-  const url = text(value, 'Recipe URL', 2048);
-  try { if (['https:', 'http:'].includes(new URL(url).protocol)) return url; } catch {}
-  return fail(400, 'Recipe URL must start with http:// or https://.');
+  if (typeof value === 'string' && !value.trim()) return null;
+  return text(value, 'Notes', 2048);
 }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -57,8 +56,8 @@ export function createApp(config: Config) {
     const selections = req.body?.selections;
     const custom = req.body?.custom ?? [];
     if (!Array.isArray(selections) || !Array.isArray(custom) || selections.length + custom.length < 1 || selections.length + custom.length > 100) fail(400, 'Select 1–100 options.');
-    const chosen = selections.map((item: any) => ({ id: text(item?.optionId, 'Option ID'), url: recipe(item?.recipeUrl) }));
-    const added = custom.map((item: any) => ({ sectionId: text(item?.sectionId, 'Section ID'), label: text(item?.label, 'Custom option'), url: recipe(item?.recipeUrl) }));
+    const chosen = selections.map((item: any) => ({ id: text(item?.optionId, 'Option ID'), notes: notes(item?.notes) }));
+    const added = custom.map((item: any) => ({ sectionId: text(item?.sectionId, 'Section ID'), label: text(item?.label, 'Custom option'), notes: notes(item?.notes) }));
     if (new Set(chosen.map((item: { id: string }) => item.id)).size !== chosen.length) fail(400, 'Duplicate selections are not allowed.');
     db.transaction(() => {
       for (const item of chosen) {
@@ -67,11 +66,11 @@ export function createApp(config: Config) {
       for (const item of added) {
         if (!db.query('SELECT id FROM sections WHERE id = ?').get(item.sectionId)) fail(409, 'A section was removed. Review the refreshed form.');
       }
-      for (const item of chosen) db.query('INSERT INTO claims VALUES (?, ?, ?)').run(item.id, name, item.url);
+      for (const item of chosen) db.query('INSERT INTO claims VALUES (?, ?, ?)').run(item.id, name, item.notes);
       for (const item of added) {
         const id = crypto.randomUUID();
         db.query('INSERT INTO options VALUES (?, ?, ?, (SELECT COALESCE(MAX(display_order), -1) + 1 FROM options WHERE section_id = ?))').run(id, item.sectionId, item.label, item.sectionId);
-        db.query('INSERT INTO claims VALUES (?, ?, ?)').run(id, name, item.url);
+        db.query('INSERT INTO claims VALUES (?, ?, ?)').run(id, name, item.notes);
       }
     }).immediate();
     res.status(201).json(readForm(db));
@@ -138,12 +137,12 @@ export function createApp(config: Config) {
     res.json(readForm(db));
   });
   app.post('/api/admin/options/:id/claim', (req, res) => {
-    const name = text(req.body?.name, 'Name', 100), url = recipe(req.body?.recipeUrl);
+    const name = text(req.body?.name, 'Name', 100), note = notes(req.body?.notes);
     db.transaction(() => {
       const id = req.params.id as string;
       if (!db.query('SELECT id FROM options WHERE id = ?').get(id)) fail(404, 'Option no longer exists.');
       if (db.query('SELECT option_id FROM claims WHERE option_id = ?').get(id)) fail(409, 'This option is already claimed. Clear it before assigning a new name.');
-      db.query('INSERT INTO claims VALUES (?, ?, ?)').run(id, name, url);
+      db.query('INSERT INTO claims VALUES (?, ?, ?)').run(id, name, note);
     }).immediate();
     res.json(readForm(db));
   });

@@ -13,9 +13,10 @@ const name = document.querySelector<HTMLInputElement>('#guest-name')!;
 const saveStatus = document.querySelector<HTMLParagraphElement>('#save-status')!;
 const api = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const chosen = new Map<string, string>();
-const custom = new Map<string, { label: string; recipeUrl: string }>();
+const custom = new Map<string, { label: string; notes: string }>();
 let data: SignupForm | undefined;
 let saving = false;
+let completed = false;
 let refreshRequest = 0;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, content?: string) {
@@ -23,21 +24,12 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, content?: string
   if (content !== undefined) node.textContent = content;
   return node;
 }
-function urlInput(value: string, onInput: (value: string) => void) {
-  const label = element('label', 'Recipe URL ');
-  const optional = element('span', '(optional)'); optional.className = 'muted';
-  label.append(optional, document.createTextNode(' '));
-  const input = element('input');
-  input.type = 'url'; input.maxLength = 2048; input.placeholder = 'https://'; input.value = value;
+function notesInput(value: string, onInput: (value: string) => void) {
+  const label = element('label');
+  const input = element('input'); input.type = 'text'; input.maxLength = 2048; input.value = value;
+  input.placeholder = 'Notes'; input.setAttribute('aria-label', 'Notes');
   input.addEventListener('input', () => onInput(input.value));
-  label.append(input);
-  return label;
-}
-function recipeLink(url: string | null) {
-  if (!url) return undefined;
-  try { if (!['https:', 'http:'].includes(new URL(url).protocol)) return undefined; } catch { return undefined; }
-  const link = element('a', 'Recipe'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
-  return link;
+  label.append(input); return label;
 }
 function render(form: SignupForm) {
   document.querySelector('#title')!.textContent = form.title;
@@ -52,18 +44,22 @@ function render(form: SignupForm) {
       const row = element('div'); row.className = 'option';
       const label = element('label');
       const check = element('input'); check.type = 'checkbox'; check.disabled = option.claimedBy !== null; check.checked = chosen.has(option.id);
-      row.classList.toggle('selected', check.checked || check.disabled);
-      label.append(check, document.createTextNode(` ${option.label}${option.claimedBy !== null ? ` — ${option.claimedBy}` : ''}`));
+      row.classList.toggle('claimed', check.disabled);
+      label.append(check, document.createTextNode(` ${option.label}`));
       row.append(label);
-      const link = recipeLink(option.recipeUrl);
-      if (link) row.append(document.createTextNode(' · '), link);
+      if (option.claimedBy !== null) {
+        const claim = element('p', '↳ Claimed by '); claim.className = 'details claim';
+        claim.append(element('strong', option.claimedBy)); row.append(claim);
+      }
+      if (option.notes) {
+        const note = element('p', `↳ ${option.notes}`); note.className = 'details notes'; row.append(note);
+      }
       if (option.claimedBy === null) {
         const details = element('div'); details.className = 'details'; details.hidden = !check.checked;
-        details.append(urlInput(chosen.get(option.id) || '', value => chosen.set(option.id, value)));
+        details.append(notesInput(chosen.get(option.id) || '', value => chosen.set(option.id, value)));
         details.querySelector('input')!.disabled = !check.checked;
         check.addEventListener('change', () => {
           details.hidden = !check.checked;
-          row.classList.toggle('selected', check.checked);
           details.querySelector('input')!.disabled = !check.checked;
           if (check.checked) chosen.set(option.id, details.querySelector('input')!.value); else chosen.delete(option.id);
         });
@@ -72,40 +68,53 @@ function render(form: SignupForm) {
       fieldset.append(row);
     }
     const row = element('div'); row.className = 'option custom-choice';
-    const description = element('label', 'Other ');
-    const hint = element('span', '(add your own)'); hint.className = 'muted';
-    description.append(hint, document.createTextNode(' '));
+    const description = element('label');
+    const check = element('input'); check.type = 'checkbox'; check.checked = custom.has(section.id);
+    description.append(check, document.createTextNode(' Other'));
     const input = element('input'); input.type = 'text'; input.maxLength = 200; input.value = custom.get(section.id)?.label || '';
-    description.append(input);
-    const details = element('div'); details.className = 'details'; details.hidden = !input.value.trim();
-    details.append(urlInput(custom.get(section.id)?.recipeUrl || '', value => {
-      const entry = custom.get(section.id); if (entry) entry.recipeUrl = value;
+    input.setAttribute('aria-label', 'Other description'); input.hidden = !check.checked;
+    const details = element('div'); details.className = 'details'; details.hidden = !check.checked;
+    details.append(notesInput(custom.get(section.id)?.notes || '', value => {
+      const entry = custom.get(section.id); if (entry) entry.notes = value;
     }));
-    const url = details.querySelector('input')!; url.disabled = details.hidden;
-    input.addEventListener('input', () => {
-      const populated = Boolean(input.value.trim());
-      details.hidden = !populated; url.disabled = !populated;
-      if (populated) custom.set(section.id, { label: input.value, recipeUrl: url.value });
+    const note = details.querySelector('input')!; note.disabled = details.hidden;
+    const update = () => {
+      input.required = check.checked; input.hidden = !check.checked;
+      details.hidden = !check.checked; note.disabled = !check.checked;
+      if (check.checked) custom.set(section.id, { label: input.value, notes: note.value });
       else custom.delete(section.id);
+    };
+    input.required = check.checked;
+    input.addEventListener('focus', () => { check.checked = true; update(); });
+    input.addEventListener('input', update);
+    check.addEventListener('change', () => {
+      if (!check.checked) {
+        const hasText = Boolean(input.value.trim() || note.value.trim());
+        input.value = ''; note.value = '';
+        if (hasText) alert('Other was deselected. Its description and notes have been cleared.');
+      }
+      update();
+      if (check.checked) input.focus();
     });
-    row.append(description, details); fieldset.append(row); sections.append(fieldset);
+    row.append(description, input, details); fieldset.append(row); sections.append(fieldset);
   }
   submit.disabled = saving;
 }
 async function refresh() {
-  if (saving) return;
+  if (saving || completed) return;
   const request = ++refreshRequest;
   try {
     const response = await fetch(`${api}/api/form`, { credentials: 'omit', cache: 'no-store' });
     if (!response.ok) throw new Error();
     const result: SignupForm = await response.json();
     if (request !== refreshRequest || saving) return;
-    data = result; render(result); status.textContent = '';
+    data = result; render(result); status.classList.remove('selection-error'); status.textContent = '';
   } catch { if (request === refreshRequest) status.textContent = 'Could not refresh availability. Check your connection and try again.'; }
 }
 signup.addEventListener('submit', event => {
   event.preventDefault();
-  if (!chosen.size && !custom.size) { status.textContent = 'Choose at least one option.'; return; }
+  status.classList.remove('selection-error');
+  if (!chosen.size && !custom.size) { status.classList.add('selection-error'); status.textContent = 'Choose at least one option.'; return; }
   if (!signup.reportValidity()) return;
   saveStatus.textContent = ''; dialog.showModal(); name.focus();
 });
@@ -116,7 +125,7 @@ saveForm.addEventListener('submit', async event => {
   if (saving || !data) return;
   const payload: ClaimInput = {
     name: name.value,
-    selections: [...chosen].map(([optionId, recipeUrl]) => ({ optionId, recipeUrl })),
+    selections: [...chosen].map(([optionId, notes]) => ({ optionId, notes })),
     custom: [...custom].map(([sectionId, entry]) => ({ sectionId, ...entry })),
   };
   saving = true; refreshRequest++; saveButton.disabled = true; cancel.disabled = true; submit.disabled = true;
@@ -129,8 +138,10 @@ saveForm.addEventListener('submit', async event => {
       await refresh(); status.textContent = result.error; return;
     }
     if (!response.ok) { saveStatus.textContent = result.error || 'Unable to save. Try again.'; return; }
-    chosen.clear(); custom.clear(); data = result; saving = false; render(result); dialog.close();
-    status.textContent = 'Your selections are saved. Thank you!';
+    completed = true; chosen.clear(); custom.clear(); dialog.close();
+    const confirmation = element('p', 'Your selections are saved.');
+    confirmation.setAttribute('role', 'status');
+    document.querySelector('main')!.replaceChildren(confirmation);
   } catch {
     saveStatus.textContent = 'Connection lost. Your save may have completed. Close this dialog and reload the page before trying again, especially for custom choices.';
   } finally {

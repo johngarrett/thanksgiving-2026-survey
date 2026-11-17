@@ -1,0 +1,25 @@
+{
+  "name": "thanksgiving-signup",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch server/index.ts",
+    "dev:public": "vite --host 127.0.0.1",
+    "dev:admin": "vite --host 127.0.0.1 --mode admin",
+    "check": "tsc --noEmit",
+    "test": "bun test tests/api.test.ts",
+    "test:browser": "playwright test",
+    "build": "bun run check && bun run build:public && bun run build:admin && bun build server/index.ts --target=bun --outdir=dist/server --external express",
+    "build:public": "vite build",
+    "build:admin": "vite build --mode admin",
+    "start": "bun dist/server/index.js"
+  },
+  "dependencies": { "express": "^5.1.0" },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/bun": "^1.3.8",
+    "@types/express": "^5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.0"
+  }
+}

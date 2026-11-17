@@ -1,0 +1,20 @@
+body { font-family: Helvetica, Arial, sans-serif; background: white; color: black; margin: 2rem auto; padding: 0 1rem; max-width: 46rem; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+fieldset { min-width: 0; border: 0; margin: 2rem 0; padding: 0; }
+legend { font-size: 1.4rem; font-weight: bold; padding: 0; }
+.option { margin: 1rem 0; }
+.details { margin: .5rem 0 .5rem 1.6rem; }
+.details label { display: block; margin: .5rem 0; }
+input[type='text'], input[type='url'], input:not([type]) { box-sizing: border-box; max-width: 100%; width: 24rem; padding: .3rem; }
+dialog { max-width: min(32rem, 85vw); }
+dialog::backdrop { background: rgb(0 0 0 / 25%); }
+[hidden] { display: none !important; }
+a { overflow-wrap: anywhere; }
+#status:empty, #save-status:empty { display: none; }
+.custom-choice > label { display: block; }
+.custom-choice > label input { display: block; margin-top: .5rem; }
+.custom-choice .details { margin-left: 0; }
+:focus-visible { outline: 2px solid black; outline-offset: 3px; }
+h1, h2, h3, legend { font-family: Georgia, 'Times New Roman', serif; }

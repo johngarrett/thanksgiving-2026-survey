@@ -1,0 +1,17 @@
+body { font-family: Helvetica, Arial, sans-serif; color: black; background: white; max-width: 58rem; margin: 2rem auto; padding: 0 1rem; }
+button, input { font: inherit; }
+button { cursor: pointer; margin: .25rem .25rem .25rem 0; }
+button:disabled { cursor: default; }
+input { max-width: 100%; box-sizing: border-box; padding: .25rem; }
+input[type='text'], input[type='url'] { width: 23rem; }
+label { display: block; margin: .4rem 0; }
+fieldset { min-width: 0; margin: 1rem 0; padding: 1rem; }
+.option { border-top: 1px solid #aaa; padding: 1rem 0; }
+form { margin: .75rem 0; }
+.handle { touch-action: none; cursor: grab; }
+.dragging { outline: 2px dashed black; }
+#status { min-height: 1.5em; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid black; outline-offset: 3px; }
+a { overflow-wrap: anywhere; }
+h1, h2, h3, legend { font-family: Georgia, 'Times New Roman', serif; }

@@ -161,7 +161,7 @@ export function createApp(config: Config) {
       const current = (sectionId === undefined ? db.query('SELECT id FROM sections').all() : db.query('SELECT id FROM options WHERE section_id = ?').all(sectionId)) as { id: string }[];
       if (ids.length !== current.length || new Set(ids).size !== ids.length || current.some(row => !ids.includes(row.id))) fail(409, 'The list changed. Refresh before reordering.');
       const statement = db.query(sectionId === undefined ? 'UPDATE sections SET display_order = ? WHERE id = ?' : 'UPDATE options SET display_order = ? WHERE id = ?');
-      ids.forEach((id, i) => statement.run(i, id));
+      ids.forEach((id: string, i: number) => statement.run(i, id));
     }).immediate();
     res.json(readForm(db));
   });

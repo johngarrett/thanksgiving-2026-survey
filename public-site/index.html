@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Sign up for Thanksgiving food and tasks."><title>Thanksgiving</title></head>
+<body>
+  <main>
+    <h1 id="title">Thanksgiving</h1>
+    <p>Choose any available dishes or tasks. Each option can be claimed by one person.</p>
+    <p id="status" role="status" aria-live="polite">Loading…</p>
+    <form id="signup">
+      <div id="sections"></div>
+      <button id="submit" type="submit" disabled>Submit selections</button>
+    </form>
+    <dialog id="name-dialog" aria-labelledby="dialog-title">
+      <form id="save-form">
+        <h2 id="dialog-title">Save your selections</h2>
+        <label>Your name <input id="guest-name" name="name" required maxlength="100" autocomplete="name"></label>
+        <p id="save-status" role="status" aria-live="polite"></p>
+        <button id="save" type="submit">Save</button>
+        <button id="cancel" type="button">Cancel</button>
+      </form>
+    </dialog>
+  </main>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
